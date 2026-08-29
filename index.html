@@ -1081,66 +1081,68 @@
 
 <canvas id="ambientCanvas" aria-hidden="true"></canvas>
 
-<div class="wrap">
-  <header>
-    <div>
-      <h1><span class="dot"></span>Deep Delve</h1>
-      <p class="byline"><img class="author-avatar" src="data:image/jpeg;base64,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" alt="Sairaj Dilip Vernekar" />By Sairaj Dilip Vernekar</p>
-      <p class="tagline">A new cave maze every run. Hit a dead end? Just turn back and try another path.</p>
-    </div>
-    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; align-self:flex-start;">
-      <div style="display:flex; gap:8px;">
-        <a href="mailto:sairajvernekar@yahoo.com?subject=Deep%20Delve%20feedback&body=Hey%20Sairaj%2C%0A%0A" id="btnEmailMe" class="secondary" style="width:auto; padding:8px 14px; text-decoration:none; display:inline-flex; align-items:center; font-family:var(--font-mono); font-size:12.5px; color:var(--text); border:1px solid var(--border); border-radius:8px; background:var(--panel-2);">✉️ Send feedback</a>
-        <button class="secondary" id="btnHowToPlay" style="width:auto; padding:8px 14px;">❓ How to play</button>
-        <button class="secondary" id="btnInsights" style="width:auto; padding:8px 14px;">📊 Insights</button>
-      </div>
-      <div style="font-size:10.5px; color:var(--text-faint);">
-        Mail app not opening? <button id="btnCopyEmail" style="background:none; border:none; padding:0; margin:0; color:var(--teal); text-decoration:underline; cursor:pointer; font-family:var(--font-mono); font-size:10.5px;">Copy sairajvernekar@yahoo.com</button>
-        <span id="copyEmailNote" style="margin-left:4px;"></span>
-      </div>
-    </div>
-  </header>
+<!-- ============ SIGN-IN SCREEN ============ -->
+<div id="screenSignIn" class="screen">
+  <div class="wrap" style="max-width:460px;">
+    <header style="justify-content:center; text-align:center; border-bottom:none; flex-direction:column; gap:2px;">
+      <h1 style="justify-content:center;"><span class="dot"></span>Deep Delve</h1>
+      <p class="tagline">A new cave maze every run. Sign in to keep your streaks, badges, and saved mazes.</p>
+    </header>
 
-  <div class="save-banner" id="saveBanner">
-    <span class="save-banner-icon" aria-hidden="true">💾</span>
-    <div class="save-banner-text">
-      <b>Don't lose your progress.</b> Create an account below, then tap <b>Choose save folder</b> (or <b>Download save file</b> if that's not offered) in the Account card — otherwise everything resets the moment you close this tab. Coming back later on a new device or browser? Use <b>Load save file</b> to bring that file back in and sign in again.
+    <!-- Account (sign in / create / storage) -->
+    <div class="card" id="accountCard">
+      <h2>Account</h2>
+
+      <div class="stack-gap" id="storageSection">
+        <p class="field-note" id="storageStatus">Checking save location…</p>
+        <div class="row-2">
+          <button class="secondary" id="btnChooseFolder" style="display:none;">Choose save folder</button>
+          <button class="secondary" id="btnReconnectFolder" style="display:none;">Reconnect folder</button>
+          <button class="secondary" id="btnDownloadFile">Download save file</button>
+          <button class="secondary" id="btnLoadFileTrigger">Load save file</button>
+        </div>
+        <input type="file" id="storageFileInput" accept="application/json" style="display:none;" />
+      </div>
+
+      <div id="accountLoggedOut" class="stack-gap">
+        <input type="text" class="field" id="accUsernameInput" placeholder="Username" autocomplete="off" />
+        <input type="password" class="field" id="accPasswordInput" placeholder="Password" autocomplete="off" />
+        <div class="row-2">
+          <button class="secondary" id="btnSignIn">Sign in</button>
+          <button class="primary" id="btnCreateAccount">Create account</button>
+        </div>
+        <p class="field-note" id="accountNote">Your account is saved to a file on your computer, not to a server. Your password is hashed before saving, but this still isn't high-security — don't reuse an important password.</p>
+      </div>
+
+      <div id="accountLoggedIn" class="stack-gap" style="display:none;">
+        <div class="account-summary">
+          <div class="who">
+            Signed in as <b id="accUsername"></b><span class="acc-flair" id="accFlairDisplay" style="display:none;"></span>
+            <span class="sub" id="accSummary">0 mazes solved</span>
+          </div>
+          <button class="secondary" id="btnSignOut" style="width:auto; padding:8px 10px;">Sign out</button>
+        </div>
+      </div>
     </div>
-    <div class="save-banner-actions">
-      <button class="secondary" id="btnSaveBannerShow">Show me where</button>
-    </div>
+
+    <p class="field-note" style="text-align:center; margin: 4px 0 14px;">No account? You can still play — badges and synced saves just won't be tracked as a guest.</p>
+
+    <button class="primary" id="btnEnterGame" style="padding:14px; font-size:15px; margin-bottom:40px;">Continue →</button>
   </div>
+</div>
 
-  <div class="save-banner" id="challengeBanner" style="display:none; border-color: var(--violet); background: rgba(181, 131, 247, 0.08);">
-    <span class="save-banner-icon" aria-hidden="true">🎯</span>
-    <div class="save-banner-text">
-      <b>You've been challenged.</b> <span id="challengeBannerText">This is the exact maze a friend sent you — fresh, no progress. Solve it and see how you did.</span>
-    </div>
-    <div class="save-banner-actions">
-      <button class="secondary" id="btnChallengeBannerClose">Got it</button>
-    </div>
-  </div>
-
-  <div class="layout">
-    <div class="maze-panel">
-      <div class="mini-map" id="miniMapWrap" aria-hidden="true"><canvas id="miniMapCanvas"></canvas></div>
-      <div class="maze-scroll" id="mazeScroll"><canvas id="mazeCanvas"></canvas></div>
-      <p class="zoom-hint" id="zoomHint">This maze is bigger than the view — scroll or drag inside it to look around. Every cell stays a fixed size so the path is always visible.</p>
-      <div class="dpad" aria-label="Movement controls">
-        <button class="up" aria-label="Move up" data-dir="up">▲</button>
-        <button class="left" aria-label="Move left" data-dir="left">◀</button>
-        <div class="center"></div>
-        <button class="right" aria-label="Move right" data-dir="right">▶</button>
-        <button class="down" aria-label="Move down" data-dir="down">▼</button>
+<!-- ============ MAZE SETUP SCREEN ============ -->
+<div id="screenSetup" class="screen" style="display:none;">
+  <div class="wrap" style="max-width:640px;">
+    <header>
+      <div>
+        <h1><span class="dot"></span>Deep Delve</h1>
+        <p class="tagline">Pick a size, an explorer, and a theme — then head into the cave.</p>
       </div>
-      <div class="peek-row">
-        <button class="secondary" id="btnPeek">👁️ Peek (1 left)</button>
-        <button class="secondary" id="btnUnwind">🔙 Unwind (3 left)</button>
-      </div>
-      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving.</p>
-    </div>
+      <button class="secondary" id="btnSetupToAccount" style="width:auto; padding:8px 14px; align-self:flex-start;">⚙️ Account</button>
+    </header>
 
-    <div class="panel">
+    <div class="panel" id="setupPanel">
       <!-- Size -->
       <div class="card">
         <h2>Maze size</h2>
@@ -1218,6 +1220,99 @@
         </div>
       </div>
 
+      <!-- Character -->
+      <div class="card">
+        <h2>Choose your explorer</h2>
+        <div class="chars" id="charSelect"></div>
+
+        <div class="custom-panel" id="customCharPanel">
+          <button class="file-btn" id="btnUploadTrigger">Upload from your device</button>
+          <input type="file" id="fileInput" accept="image/*" />
+          <div class="or-line">or</div>
+          <div class="url-row">
+            <input type="text" class="field" id="urlInput" placeholder="Paste an image URL" autocomplete="off" />
+            <button id="btnUseUrl">Use</button>
+          </div>
+          <p class="field-note" id="customCharNote">Uploaded images work in this session but can't be packed into a save code — link an image URL instead if you want your look to travel with your code.</p>
+        </div>
+      </div>
+
+      <!-- Theme -->
+      <div class="card">
+        <h2>Theme</h2>
+        <div class="info-box" id="colorblindInfoBox">
+          <span class="info-box-icon" aria-hidden="true">🔷</span>
+          <span><b>Colorblind-friendly:</b> the <b>Clear Sight</b> theme swaps every red/green color pairing for a high-contrast blue/orange/yellow palette, so walls, trail, and the finish torch all stay distinguishable regardless of color vision. It's always free — no need to unlock it.</span>
+        </div>
+        <div class="themes" id="themeSelect"></div>
+        <p class="field-note" id="themeNote">Pick a look for the cave — your choice is remembered on this device. More themes unlock as you solve every Level-mode level in order — skipping ahead doesn't count.</p>
+      </div>
+    </div>
+
+    <button class="primary" id="btnSetupNext" style="padding:14px; font-size:15px; margin: 6px 0 40px;">Next: Enter the maze →</button>
+  </div>
+</div>
+
+<!-- ============ GAME SCREEN ============ -->
+<div id="screenGame" class="screen" style="display:none;">
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="dot"></span>Deep Delve</h1>
+      <p class="byline"><img class="author-avatar" src="data:image/jpeg;base64,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" alt="Sairaj Dilip Vernekar" />By Sairaj Dilip Vernekar</p>
+      <p class="tagline">A new cave maze every run. Hit a dead end? Just turn back and try another path.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; align-self:flex-start;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+        <button class="secondary" id="btnGoSetup" style="width:auto; padding:8px 14px;">🧩 Maze setup</button>
+        <button class="secondary" id="btnInsights" style="width:auto; padding:8px 14px;">📊 Insights</button>
+        <button class="secondary" id="btnGoFeedback" style="width:auto; padding:8px 14px;">✉️ Feedback</button>
+        <button class="secondary" id="btnHowToPlay" style="width:auto; padding:8px 14px;">❓ How to play</button>
+        <button class="secondary" id="btnGameLogout" style="width:auto; padding:8px 14px; display:none; border-color: var(--coral); color: var(--coral);">🚪 Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="save-banner" id="saveBanner">
+    <span class="save-banner-icon" aria-hidden="true">💾</span>
+    <div class="save-banner-text">
+      <b>Don't lose your progress.</b> Create an account below, then tap <b>Choose save folder</b> (or <b>Download save file</b> if that's not offered) in the Account card — otherwise everything resets the moment you close this tab. Coming back later on a new device or browser? Use <b>Load save file</b> to bring that file back in and sign in again.
+    </div>
+    <div class="save-banner-actions">
+      <button class="secondary" id="btnSaveBannerShow">Show me where</button>
+    </div>
+  </div>
+
+  <div class="save-banner" id="challengeBanner" style="display:none; border-color: var(--violet); background: rgba(181, 131, 247, 0.08);">
+    <span class="save-banner-icon" aria-hidden="true">🎯</span>
+    <div class="save-banner-text">
+      <b>You've been challenged.</b> <span id="challengeBannerText">This is the exact maze a friend sent you — fresh, no progress. Solve it and see how you did.</span>
+    </div>
+    <div class="save-banner-actions">
+      <button class="secondary" id="btnChallengeBannerClose">Got it</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="maze-panel">
+      <div class="mini-map" id="miniMapWrap" aria-hidden="true"><canvas id="miniMapCanvas"></canvas></div>
+      <div class="maze-scroll" id="mazeScroll"><canvas id="mazeCanvas"></canvas></div>
+      <p class="zoom-hint" id="zoomHint">This maze is bigger than the view — scroll or drag inside it to look around. Every cell stays a fixed size so the path is always visible.</p>
+      <div class="dpad" aria-label="Movement controls">
+        <button class="up" aria-label="Move up" data-dir="up">▲</button>
+        <button class="left" aria-label="Move left" data-dir="left">◀</button>
+        <div class="center"></div>
+        <button class="right" aria-label="Move right" data-dir="right">▶</button>
+        <button class="down" aria-label="Move down" data-dir="down">▼</button>
+      </div>
+      <div class="peek-row">
+        <button class="secondary" id="btnPeek">👁️ Peek (1 left)</button>
+        <button class="secondary" id="btnUnwind">🔙 Unwind (3 left)</button>
+      </div>
+      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving.</p>
+    </div>
+
+    <div class="panel">
       <div class="card">
         <h2>Actions</h2>
         <div class="actions">
@@ -1270,89 +1365,11 @@
         </div>
       </div>
 
-      <!-- Account -->
-      <div class="card" id="accountCard">
-        <h2>Account</h2>
-
-        <div class="stack-gap" id="storageSection">
-          <p class="field-note" id="storageStatus">Checking save location…</p>
-          <div class="row-2">
-            <button class="secondary" id="btnChooseFolder" style="display:none;">Choose save folder</button>
-            <button class="secondary" id="btnReconnectFolder" style="display:none;">Reconnect folder</button>
-            <button class="secondary" id="btnDownloadFile">Download save file</button>
-            <button class="secondary" id="btnLoadFileTrigger">Load save file</button>
-          </div>
-          <input type="file" id="storageFileInput" accept="application/json" style="display:none;" />
-        </div>
-
-        <div id="accountLoggedOut" class="stack-gap">
-          <input type="text" class="field" id="accUsernameInput" placeholder="Username" autocomplete="off" />
-          <input type="password" class="field" id="accPasswordInput" placeholder="Password" autocomplete="off" />
-          <div class="row-2">
-            <button class="secondary" id="btnSignIn">Sign in</button>
-            <button class="primary" id="btnCreateAccount">Create account</button>
-          </div>
-          <p class="field-note" id="accountNote">Your account is saved to a file on your computer, not to a server. Your password is hashed before saving, but this still isn't high-security — don't reuse an important password.</p>
-        </div>
-
-        <div id="accountLoggedIn" class="stack-gap" style="display:none;">
-          <div class="account-summary">
-            <div class="who">
-              Signed in as <b id="accUsername"></b><span class="acc-flair" id="accFlairDisplay" style="display:none;"></span>
-              <span class="sub" id="accSummary">0 mazes solved</span>
-            </div>
-            <button class="secondary" id="btnSignOut" style="width:auto; padding:8px 10px;">Sign out</button>
-          </div>
-          <button class="secondary" id="btnToggleHistory" style="width:auto; align-self:flex-start; padding:8px 12px; font-size:12px;">📜 View solved mazes</button>
-          <div class="history-list" id="historyList" style="display:none;"></div>
-        </div>
-      </div>
-
-      <!-- Character -->
-      <div class="card">
-        <h2>Choose your explorer</h2>
-        <div class="chars" id="charSelect"></div>
-
-        <div class="custom-panel" id="customCharPanel">
-          <button class="file-btn" id="btnUploadTrigger">Upload from your device</button>
-          <input type="file" id="fileInput" accept="image/*" />
-          <div class="or-line">or</div>
-          <div class="url-row">
-            <input type="text" class="field" id="urlInput" placeholder="Paste an image URL" autocomplete="off" />
-            <button id="btnUseUrl">Use</button>
-          </div>
-          <p class="field-note" id="customCharNote">Uploaded images work in this session but can't be packed into a save code — link an image URL instead if you want your look to travel with your code.</p>
-        </div>
-      </div>
-
-      <!-- Theme -->
-      <div class="card">
-        <h2>Theme</h2>
-        <div class="info-box" id="colorblindInfoBox">
-          <span class="info-box-icon" aria-hidden="true">🔷</span>
-          <span><b>Colorblind-friendly:</b> the <b>Clear Sight</b> theme swaps every red/green color pairing for a high-contrast blue/orange/yellow palette, so walls, trail, and the finish torch all stay distinguishable regardless of color vision. It's always free — no need to unlock it.</span>
-        </div>
-        <div class="themes" id="themeSelect"></div>
-        <p class="field-note" id="themeNote">Pick a look for the cave — your choice is remembered on this device. More themes unlock as you solve every Level-mode level in order — skipping ahead doesn't count.</p>
-      </div>
-
-      <!-- Achievements -->
-      <div class="card">
-        <h2>Achievements</h2>
-        <div id="badgeGroups"></div>
-        <p class="field-note" id="badgeNote">Sign in to start earning badges — they're saved to your account.</p>
-      </div>
-
-      <!-- Flair -->
-      <div class="card">
-        <h2>Flair</h2>
-        <div class="flairs" id="flairSelect"></div>
-        <p class="field-note" id="flairNote">Sign in and unlock badges to earn flairs you can equip beside your name.</p>
-      </div>
     </div>
   </div>
 
   <footer class="site-footer">Deep Delve — a maze you carry with you<br><img class="footer-avatar" src="data:image/jpeg;base64,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" alt="Sairaj Dilip Vernekar" />Made by Sairaj Dilip Vernekar</footer>
+</div>
 </div>
 
 <div class="overlay" id="howToPlayOverlay">
@@ -1432,8 +1449,8 @@
               <p>Your account, badges and history live in one save file, kept separate from single-maze save codes above. This is the part people miss most, so here's the short version:</p>
               <p>1. In the Account card, type a username and password and tap <b>Create account</b>.</p>
               <p>2. Right above that, tap <b>Choose save folder</b> if your browser offers it — this is the "set and forget" option: every solve auto-saves to that folder from then on, and the game reconnects to it automatically next time you open this page.</p>
-              <p>3. Don't see "Choose save folder," or want an extra backup anyway? Tap <b>Download save file</b> any time — that gives you a <span class="key">deep-delve-save.json</span> file. Keep it somewhere you'll find it (or re-download it after playing more).</p>
-              <p>4. Coming back later, on this device or a new one: if you'd linked a folder, it reconnects on its own — just sign in. Otherwise, tap <b>Load save file</b>, pick your <span class="key">deep-delve-save.json</span>, then sign in to your account to pick up right where you left off.</p>
+              <p>3. Don't see "Choose save folder," or want an extra backup anyway? Tap <b>Download save file</b> any time — that gives you a file named after your username (e.g. <span class="key">yourname.json</span>). Keep it somewhere you'll find it (or re-download it after playing more).</p>
+              <p>4. Coming back later, on this device or a new one: if you'd linked a folder, it reconnects on its own — just sign in. Otherwise, tap <b>Load save file</b>, pick your downloaded <span class="key">yourname.json</span>, then sign in to your account to pick up right where you left off.</p>
               <p>Nothing here touches a server — everything lives in that one file, on your device, under your control. If you skip all four steps, your account still works for the current tab, but closing the tab (or clearing site data) without a linked folder or a downloaded file means that progress is gone for good.</p>
             </section>
           </div>
@@ -1509,9 +1526,55 @@
       <h3>📊 Your insights</h3>
       <button class="secondary" id="btnInsightsClose" aria-label="Close">✕</button>
     </div>
-    <div class="help-body" id="insightsBody"></div>
+    <div class="help-body">
+      <div id="insightsBody"></div>
+
+      <section style="margin-top:6px;">
+        <p class="insight-section-title">Previously solved mazes</p>
+        <button class="secondary" id="btnToggleHistory" style="width:auto; align-self:flex-start; padding:8px 12px; font-size:12px;">📜 View solved mazes</button>
+        <div class="history-list" id="historyList" style="display:none;"></div>
+      </section>
+
+      <section style="margin-top:18px;">
+        <p class="insight-section-title">Achievements</p>
+        <div id="badgeGroups"></div>
+        <p class="field-note" id="badgeNote">Sign in to start earning badges — they're saved to your account.</p>
+      </section>
+
+      <section style="margin-top:18px;">
+        <p class="insight-section-title">Flair</p>
+        <div class="flairs" id="flairSelect"></div>
+        <p class="field-note" id="flairNote">Sign in and unlock badges to earn flairs you can equip beside your name.</p>
+      </section>
+    </div>
     <div class="modal-actions">
       <button class="primary" id="btnInsightsGotIt">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="feedbackOverlay">
+  <div class="modal help-modal">
+    <div class="help-header">
+      <h3>✉️ Send feedback</h3>
+      <button class="secondary" id="btnFeedbackClose" aria-label="Close">✕</button>
+    </div>
+    <div class="help-body">
+      <p class="field-note">Got a bug report, an idea, or just want to say hi? This opens your email app with a message pre-filled to Sairaj — nothing is sent automatically from here.</p>
+      <div class="stack-gap">
+        <input type="text" class="field" id="fbName" placeholder="Your name (optional)" autocomplete="off" />
+        <input type="email" class="field" id="fbEmail" placeholder="Your email, so I can reply (optional)" autocomplete="off" />
+        <textarea class="field" id="fbMessage" rows="5" placeholder="Your message"></textarea>
+        <button class="primary" id="btnFeedbackSend">✉️ Open in mail app</button>
+        <p class="field-note" id="fbNote"></p>
+        <p style="font-size:10.5px; color:var(--text-faint); margin:0;">
+          Mail app not opening? <button id="btnCopyEmail" style="background:none; border:none; padding:0; margin:0; color:var(--teal); text-decoration:underline; cursor:pointer; font-family:var(--font-mono); font-size:10.5px;">Copy sairajvernekar@yahoo.com</button>
+          <span id="copyEmailNote" style="margin-left:4px;"></span>
+        </p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="primary" id="btnFeedbackClose2">Close</button>
     </div>
   </div>
 </div>
@@ -4369,12 +4432,27 @@
     }
   }
 
+  function sanitizeFileName(name) {
+    // Keep it filesystem-safe: letters, numbers, dash, underscore only.
+    const cleaned = name.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    return cleaned || 'deep-delve-save';
+  }
+
   function downloadStore() {
-    const blob = new Blob([JSON.stringify(localStore || emptyStore(), null, 2)], { type: 'application/json' });
+    const store = localStore || emptyStore();
+    let data = store;
+    let fileName = SAVE_FILE_NAME;
+    if (state.currentUser) {
+      const key = state.currentUser.toLowerCase();
+      // Export just the signed-in user's record, named after their username.
+      if (store[key]) data = { [key]: store[key] };
+      fileName = `${sanitizeFileName(key)}.json`;
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = SAVE_FILE_NAME;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -4509,14 +4587,17 @@
   }
 
   function renderAccountUI() {
+    const gameLogoutBtn = document.getElementById('btnGameLogout');
     if (state.currentUser) {
       accountLoggedOut.style.display = 'none';
       accountLoggedIn.style.display = 'flex';
       accUsername.textContent = state.currentUser;
       renderAccountSummary();
+      if (gameLogoutBtn) gameLogoutBtn.style.display = 'inline-block';
     } else {
       accountLoggedOut.style.display = 'flex';
       accountLoggedIn.style.display = 'none';
+      if (gameLogoutBtn) gameLogoutBtn.style.display = 'none';
     }
   }
 
@@ -5388,6 +5469,10 @@
   // file — directly on the main screen. It's permanent: it always shows, on
   // every visit, and isn't dismissible.
   document.getElementById('btnSaveBannerShow').addEventListener('click', () => {
+    // The Account card now lives on the sign-in screen rather than
+    // alongside the maze, so jump there first — scrolling to an element
+    // behind a hidden screen wouldn't show anything.
+    showScreen('signin');
     const accountCard = document.getElementById('accountCard');
     accountCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     accountCard.classList.remove('highlight-pulse');
@@ -5433,6 +5518,110 @@
 
   window.addEventListener('resize', () => { resizeCanvas(); draw(); scrollToPlayer(); });
 
+  // ---------- Screens: sign-in → maze setup → game ----------
+  // The three top-level "pages" are just plain divs toggled with display —
+  // nothing about the underlying game state, canvas, or account logic
+  // changes based on which screen is showing. That means a maze can (and
+  // does) get generated in the background while the game screen is hidden;
+  // resizeCanvas() depends on the panel's real on-screen width, so it's
+  // recomputed (along with draw/scrollToPlayer) every time the game screen
+  // becomes visible, not just when a maze first generates.
+  const screenEls = {
+    signin: document.getElementById('screenSignIn'),
+    setup: document.getElementById('screenSetup'),
+    game: document.getElementById('screenGame'),
+  };
+  function showScreen(name) {
+    Object.keys(screenEls).forEach(key => {
+      if (screenEls[key]) screenEls[key].style.display = (key === name) ? '' : 'none';
+    });
+    if (name === 'signin') {
+      renderAccountUI();
+    } else if (name === 'setup') {
+      syncSizeButtons();
+      buildThemeSelect();
+      buildCharSelect();
+    } else if (name === 'game') {
+      resizeCanvas();
+      draw();
+      scrollToPlayer();
+    }
+    window.scrollTo(0, 0);
+  }
+
+  document.getElementById('btnEnterGame').addEventListener('click', () => showScreen('setup'));
+  document.getElementById('btnSetupToAccount').addEventListener('click', () => showScreen('signin'));
+  document.getElementById('btnSetupNext').addEventListener('click', () => showScreen('game'));
+  document.getElementById('btnGoSetup').addEventListener('click', () => showScreen('setup'));
+  // Lets a signed-in player log out directly from the maze screen, reusing
+  // the same sign-out logic as the Account card (which also resets state
+  // and returns to the sign-in screen).
+  // Logging out from the maze screen first makes sure the latest changes
+  // are actually saved somewhere durable, since a player might be mid-run
+  // with nothing written to disk yet. On a browser that supports linking a
+  // local folder (most laptops running Chrome/Edge/Brave), it saves there —
+  // prompting to choose one first if none is linked yet. Otherwise (Safari,
+  // most mobile browsers) it falls back to downloading a save file the
+  // player can use to replace their old one.
+  document.getElementById('btnGameLogout').addEventListener('click', () => {
+    if (!state.currentUser) { document.getElementById('btnSignOut').click(); return; }
+    const hasFolder = saveDirHandle && folderPermState === 'granted';
+    let body;
+    if (hasFolder) {
+      body = `Your account is linked to "${saveDirHandle.name}/${SAVE_FILE_NAME}" on this computer. Logging out will save your latest progress there first, then sign you out.`;
+    } else if (fsSupported()) {
+      body = "Logging out will ask you to choose a folder to save your latest progress to on this computer. If you cancel that, it'll download a save file instead — replace your old save file with it to keep your progress.";
+    } else {
+      const dlName = `${sanitizeFileName(state.currentUser.toLowerCase())}.json`;
+      body = `This browser can't auto-save to a folder, so logging out will download "${dlName}" with your latest progress — replace your old save file with this one to keep it.`;
+    }
+    showConfirm({
+      title: 'Save & log out?',
+      body,
+      okLabel: 'Save & log out',
+      onConfirm: async () => {
+        if (hasFolder) {
+          await persistStore();
+        } else if (fsSupported()) {
+          const connected = await connectFolder(false);
+          if (!connected) downloadStore(); // picker cancelled or failed — fall back to a download
+          else renderStorageStatus();
+        } else {
+          downloadStore();
+        }
+        document.getElementById('btnSignOut').click();
+      }
+    });
+  });
+  // Sign-out already resets account state elsewhere — this just brings the
+  // player back to the sign-in screen afterward so they can sign into a
+  // different account or continue as a guest.
+  document.getElementById('btnSignOut').addEventListener('click', () => showScreen('signin'));
+
+  // ---------- UI wiring: feedback page ----------
+  const feedbackOverlayEl = document.getElementById('feedbackOverlay');
+  document.getElementById('btnGoFeedback').addEventListener('click', () => feedbackOverlayEl.classList.add('show'));
+  document.getElementById('btnFeedbackClose').addEventListener('click', () => feedbackOverlayEl.classList.remove('show'));
+  document.getElementById('btnFeedbackClose2').addEventListener('click', () => feedbackOverlayEl.classList.remove('show'));
+  document.getElementById('btnFeedbackSend').addEventListener('click', () => {
+    const name = document.getElementById('fbName').value.trim();
+    const email = document.getElementById('fbEmail').value.trim();
+    const msg = document.getElementById('fbMessage').value.trim();
+    const note = document.getElementById('fbNote');
+    if (!msg) {
+      note.textContent = 'Write a message first.';
+      note.className = 'field-note error';
+      return;
+    }
+    let body = msg;
+    if (name) body += `\n\n— ${name}`;
+    if (email) body += `\n(reply to: ${email})`;
+    const href = `mailto:sairajvernekar@yahoo.com?subject=${encodeURIComponent('Deep Delve feedback')}&body=${encodeURIComponent(body)}`;
+    window.location.href = href;
+    note.textContent = 'Opening your mail app…';
+    note.className = 'field-note success';
+  });
+
   // ---------- Init ----------
   loadInitialTheme();
   buildThemeSelect();
@@ -5446,13 +5635,18 @@
   renderAccountUI();
   renderAchievements();
   renderFlairs();
-  if (!applyChallengeFromHash()) {
+  const cameFromChallenge = applyChallengeFromHash();
+  if (!cameFromChallenge) {
     applyNewMaze(SIZES.medium.cols, SIZES.medium.rows, 'medium');
   }
   requestAnimationFrame(animLoop);
 
   renderStorageStatus();
   restoreFolderOnLoad().then(renderStorageStatus);
+
+  // A challenge link should drop the recipient straight into the maze
+  // they were sent, not make them click through sign-in and setup first.
+  showScreen(cameFromChallenge ? 'game' : 'signin');
 })();
 </script>
 </body>
