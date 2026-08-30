@@ -897,6 +897,32 @@
   .help-cat-body-inner section { margin-bottom: 14px; }
   .help-cat-body-inner section:last-child { margin-bottom: 0; }
 
+  /* Daily leaderboard */
+  .modal.leaderboard-modal { max-width: 400px; }
+  .lb-date { font-size: 11.5px; color: var(--text-faint); margin: -6px 0 12px; }
+  .lb-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+  .lb-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    font-size: 12.5px;
+  }
+  .lb-row.me { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; }
+  .lb-rank { width: 26px; flex: none; text-align: center; font-family: var(--font-display); color: var(--text-muted); }
+  .lb-row.rank-1 .lb-rank { color: var(--gold); }
+  .lb-row.rank-2 .lb-rank { color: #C7CEDB; }
+  .lb-row.rank-3 .lb-rank { color: #CD9B6A; }
+  .lb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .lb-row.me .lb-name::after { content: ' (you)'; color: var(--teal); }
+  .lb-stats { flex: none; color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; }
+  .lb-clean { flex: none; font-size: 12px; }
+  .lb-empty { font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 18px 0; }
+  .lb-own-rank { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 12px; color: var(--text-muted); text-align: center; }
+
   /* Insights */
   .modal.insights-modal { max-width: 540px; }
   .insight-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 18px; }
@@ -1150,6 +1176,7 @@
 
         <div class="custom-panel" id="dailyPanel">
           <p class="field-note">🗓️ <b id="dailyDateLabel"></b> — everyone gets this exact maze today. It's seeded from the date, so no server needed and no two days match. Resets at local midnight.</p>
+          <button class="secondary" id="btnDailyLeaderboard" style="width:auto; padding:8px 14px;">🏆 Today's leaderboard</button>
         </div>
 
         <div class="custom-panel" id="customSizePanel">
@@ -1525,6 +1552,20 @@
     </div>
     <div class="modal-actions">
       <button class="primary" id="btnInsightsGotIt">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dailyLeaderboardOverlay">
+  <div class="modal leaderboard-modal">
+    <div class="icon">🏆</div>
+    <h3>Daily leaderboard</h3>
+    <p class="lb-date" id="lbDateLabel"></p>
+    <div id="lbBody">
+      <p class="lb-empty">Loading…</p>
+    </div>
+    <div class="modal-actions">
+      <button class="primary" id="btnLeaderboardClose">Close</button>
     </div>
   </div>
 </div>
@@ -2993,6 +3034,9 @@
       }
       state.solvedRecords.push(record);
       try { await saveSolvedRecords(state.currentUser, state.solvedRecords); } catch(e) {}
+      if (state.sizeKey === 'daily') {
+        try { await submitDailyScore(state.currentUser, record); } catch (e) {}
+      }
       clearTimeout(autoSaveMazeTimer);
       state.inProgressMaze = null;
       try { await clearInProgressMaze(state.currentUser); } catch(e) {}
@@ -4450,6 +4494,120 @@
       .eq('username', username.toLowerCase());
   }
 
+  // ---------- Daily leaderboard ----------
+  // Lives in its own public table (not the private `accounts` row) since a
+  // leaderboard needs to read every player's score, not just your own. Only
+  // a player's best run of the day is kept — later worse runs don't overwrite it.
+  async function submitDailyScore(username, record) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    const date = todayDateKey();
+    try {
+      const { data: existing } = await sb
+        .from('daily_scores')
+        .select('time_seconds, moves')
+        .eq('user_id', user.id)
+        .eq('date', date)
+        .maybeSingle();
+      if (existing) {
+        const better = record.time < existing.time_seconds ||
+          (record.time === existing.time_seconds && record.moves < existing.moves);
+        if (!better) return;
+      }
+      await sb.from('daily_scores').upsert({
+        user_id: user.id,
+        username: username.toLowerCase(),
+        date,
+        time_seconds: record.time,
+        moves: record.moves,
+        clean: record.clean
+      }, { onConflict: 'user_id,date' });
+    } catch (e) { /* best effort — a failed leaderboard write shouldn't block the win screen */ }
+  }
+
+  async function fetchDailyLeaderboard(limit) {
+    const date = todayDateKey();
+    const { data, error } = await sb
+      .from('daily_scores')
+      .select('username, time_seconds, moves, clean')
+      .eq('date', date)
+      .order('time_seconds', { ascending: true })
+      .order('moves', { ascending: true })
+      .limit(limit);
+    if (error || !data) return [];
+    return data;
+  }
+
+  // Best-effort: if the signed-in player has a score today but it didn't
+  // make the visible top rows, look up where they actually rank.
+  async function fetchOwnDailyRank(username) {
+    const date = todayDateKey();
+    try {
+      const { data: own } = await sb
+        .from('daily_scores')
+        .select('time_seconds, moves, clean')
+        .eq('username', username.toLowerCase())
+        .eq('date', date)
+        .maybeSingle();
+      if (!own) return null;
+      const { count } = await sb
+        .from('daily_scores')
+        .select('*', { count: 'exact', head: true })
+        .eq('date', date)
+        .or(`time_seconds.lt.${own.time_seconds},and(time_seconds.eq.${own.time_seconds},moves.lt.${own.moves})`);
+      return { ...own, rank: (count || 0) + 1 };
+    } catch (e) { return null; }
+  }
+
+  function formatLbTime(sec) {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  async function renderDailyLeaderboard() {
+    const body = document.getElementById('lbBody');
+    const dateLabel = document.getElementById('lbDateLabel');
+    dateLabel.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    body.innerHTML = '<p class="lb-empty">Loading…</p>';
+
+    const TOP_N = 10;
+    const rows = await fetchDailyLeaderboard(TOP_N);
+
+    if (!rows.length) {
+      body.innerHTML = '<p class="lb-empty">No one has finished today\'s maze yet — be the first!</p>';
+      return;
+    }
+
+    const meUsername = state.currentUser ? state.currentUser.toLowerCase() : null;
+    const inTop = meUsername && rows.some(r => r.username === meUsername);
+
+    let html = '<div class="lb-list">';
+    rows.forEach((r, i) => {
+      const rank = i + 1;
+      const isMe = r.username === meUsername;
+      html += `
+        <div class="lb-row rank-${rank}${isMe ? ' me' : ''}">
+          <span class="lb-rank">${rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
+          <span class="lb-name">${r.username}</span>
+          <span class="lb-stats">${formatLbTime(r.time_seconds)} · ${r.moves} moves</span>
+          <span class="lb-clean">${r.clean ? '✨' : ''}</span>
+        </div>`;
+    });
+    html += '</div>';
+    body.innerHTML = html;
+
+    if (meUsername && !inTop) {
+      const own = await fetchOwnDailyRank(meUsername);
+      const ownRankEl = document.createElement('p');
+      ownRankEl.className = 'lb-own-rank';
+      ownRankEl.textContent = own
+        ? `You're #${own.rank} today — ${formatLbTime(own.time_seconds)} · ${own.moves} moves`
+        : "You haven't solved today's maze yet.";
+      body.appendChild(ownRankEl);
+    }
+  }
+
   // On page load, restore an existing online session (if any) so returning
   // players don't have to sign in again on the same device/browser.
   async function restoreSessionOnLoad() {
@@ -5261,6 +5419,14 @@
   });
   document.getElementById('btnInsightsClose').addEventListener('click', () => insightsOverlay.classList.remove('show'));
   document.getElementById('btnInsightsGotIt').addEventListener('click', () => insightsOverlay.classList.remove('show'));
+
+  // ---------- UI wiring: daily leaderboard ----------
+  const dailyLeaderboardOverlay = document.getElementById('dailyLeaderboardOverlay');
+  document.getElementById('btnDailyLeaderboard').addEventListener('click', () => {
+    dailyLeaderboardOverlay.classList.add('show');
+    renderDailyLeaderboard();
+  });
+  document.getElementById('btnLeaderboardClose').addEventListener('click', () => dailyLeaderboardOverlay.classList.remove('show'));
 
   // (The old local-save reminder banner was removed — progress now saves
   // to the player's online account automatically after every solve.)
