@@ -1111,10 +1111,11 @@
           </div>
           <button class="secondary" id="btnSignOut" style="width:auto; padding:8px 10px;">Sign out</button>
         </div>
+        <button class="primary" id="btnResumeMaze" style="display:none;">↩ Resume last maze</button>
       </div>
     </div>
 
-    <p class="field-note" style="text-align:center; margin: 4px 0 14px;">No account? You can still play — badges and synced saves just won't be tracked as a guest.</p>
+    <button class="secondary" id="btnPlayGuest" style="padding:12px; font-size:14px; margin-bottom:10px;">Play as guest</button>
 
     <button class="primary" id="btnEnterGame" style="padding:14px; font-size:15px; margin-bottom:40px;">Continue →</button>
   </div>
@@ -1261,16 +1262,6 @@
       </div>
     </div>
   </header>
-
-  <div class="save-banner" id="saveBanner">
-    <span class="save-banner-icon" aria-hidden="true">💾</span>
-    <div class="save-banner-text">
-      <b>Don't lose your progress.</b> Create an account below, then tap <b>Choose save folder</b> (or <b>Download save file</b> if that's not offered) in the Account card — otherwise everything resets the moment you close this tab. Coming back later on a new device or browser? Use <b>Load save file</b> to bring that file back in and sign in again.
-    </div>
-    <div class="save-banner-actions">
-      <button class="secondary" id="btnSaveBannerShow">Show me where</button>
-    </div>
-  </div>
 
   <div class="save-banner" id="challengeBanner" style="display:none; border-color: var(--violet); background: rgba(181, 131, 247, 0.08);">
     <span class="save-banner-icon" aria-hidden="true">🎯</span>
@@ -1434,13 +1425,11 @@
               <p>Create an account to track your solved mazes and badges — it's saved to a file on your own device, never a server. Your solve history is grouped by maze category — Small, Medium, Large, Custom and Level Mode are all kept separate, so your custom-size solves and your Level mode progress never get mixed together.</p>
             </section>
             <section>
-              <h4>Saving &amp; reloading your account — quick steps</h4>
-              <p>Your account, badges and history live in one save file, kept separate from single-maze save codes above. This is the part people miss most, so here's the short version:</p>
+              <h4>Your account — quick steps</h4>
+              <p>Your account, badges and history are saved online, kept separate from single-maze save codes above.</p>
               <p>1. In the Account card, type a username and password and tap <b>Create account</b>.</p>
-              <p>2. Right above that, tap <b>Choose save folder</b> if your browser offers it — this is the "set and forget" option: every solve auto-saves to that folder from then on, and the game reconnects to it automatically next time you open this page.</p>
-              <p>3. Don't see "Choose save folder," or want an extra backup anyway? Tap <b>Download save file</b> any time — that gives you a file named after your username (e.g. <span class="key">yourname.json</span>). Keep it somewhere you'll find it (or re-download it after playing more).</p>
-              <p>4. Coming back later, on this device or a new one: if you'd linked a folder, it reconnects on its own — just sign in. Otherwise, tap <b>Load save file</b>, pick your downloaded <span class="key">yourname.json</span>, then sign in to your account to pick up right where you left off.</p>
-              <p>Nothing here touches a server — everything lives in that one file, on your device, under your control. If you skip all four steps, your account still works for the current tab, but closing the tab (or clearing site data) without a linked folder or a downloaded file means that progress is gone for good.</p>
+              <p>2. That's it — every solve is saved to your account automatically as you play. No files to manage.</p>
+              <p>3. Coming back later, on this device or a new one: just sign in with the same username and password, and everything picks up right where you left off.</p>
             </section>
           </div>
         </div>
@@ -2182,6 +2171,7 @@
     currentUser: null,
     solvedRecords: [],
     equippedFlair: null,
+    inProgressMaze: null,
     pathLog: [[0, 0]],
     pathComplete: true,
     peekLimit: 1,
@@ -2895,6 +2885,7 @@
     draw();
     scrollToPlayer();
     syncUnwindButton();
+    scheduleAutoSaveMaze();
 
     const isExit = state.player.x === state.cols - 1 && state.player.y === state.rows - 1;
     if (isExit) { handleWin(); return; }
@@ -3006,6 +2997,10 @@
       }
       state.solvedRecords.push(record);
       try { await saveSolvedRecords(state.currentUser, state.solvedRecords); } catch(e) {}
+      clearTimeout(autoSaveMazeTimer);
+      state.inProgressMaze = null;
+      try { await clearInProgressMaze(state.currentUser); } catch(e) {}
+      renderResumeMazeButton();
       const newUnlocked = unlockedBadgeIds(state.solvedRecords);
       const justUnlocked = newUnlocked.filter(id => !prevUnlocked.includes(id));
       const justUnlockedThemes = THEMES.filter(t => t.unlockLevel && !prevThemesUnlocked.includes(t.id) && allLevelsSolvedThrough(state.solvedRecords, t.unlockLevel));
@@ -3817,7 +3812,7 @@
     return trail;
   }
 
-  function generateSaveCode() {
+  function buildSavePayload() {
     const payload = {
       v: 3,
       c: state.cols,
@@ -3840,6 +3835,52 @@
     if (state.character === 'custom' && state.customImageSrc) {
       payload.img = state.customImageSrc;
     }
+    return payload;
+  }
+
+  async function saveInProgressMaze(username, payload) {
+    await sb
+      .from('accounts')
+      .update({ in_progress_maze: payload })
+      .eq('username', username.toLowerCase());
+  }
+
+  async function loadInProgressMaze(username) {
+    const { data, error } = await sb
+      .from('accounts')
+      .select('in_progress_maze')
+      .eq('username', username.toLowerCase())
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.in_progress_maze || null;
+  }
+
+  async function clearInProgressMaze(username) {
+    await sb
+      .from('accounts')
+      .update({ in_progress_maze: null })
+      .eq('username', username.toLowerCase());
+  }
+
+  // Moves happen in quick bursts (arrow-key holds, fast taps), so autosave
+  // is debounced — one write a beat after movement pauses, not one per step.
+  let autoSaveMazeTimer = null;
+  function scheduleAutoSaveMaze() {
+    if (!state.currentUser) return;
+    clearTimeout(autoSaveMazeTimer);
+    autoSaveMazeTimer = setTimeout(() => {
+      saveInProgressMaze(state.currentUser, buildSavePayload()).catch(() => {});
+    }, 1200);
+  }
+
+  function renderResumeMazeButton() {
+    const btn = document.getElementById('btnResumeMaze');
+    if (!btn) return;
+    btn.style.display = state.currentUser && state.inProgressMaze ? 'block' : 'none';
+  }
+
+  function generateSaveCode() {
+    const payload = buildSavePayload();
     const json = JSON.stringify(payload);
     let b64 = btoa(unescape(encodeURIComponent(json)));
     b64 = b64.replace(/=+$/, '');
@@ -4445,13 +4486,14 @@
       if (!session || !session.user) return;
       const { data } = await sb
         .from('accounts')
-        .select('username, solved_records, equipped_flair')
+        .select('username, solved_records, equipped_flair, in_progress_maze')
         .eq('id', session.user.id)
         .maybeSingle();
       if (!data) return;
       state.currentUser = data.username;
       state.solvedRecords = data.solved_records || [];
       state.equippedFlair = data.equipped_flair || null;
+      state.inProgressMaze = data.in_progress_maze || null;
     } catch (e) {
       // no session, or offline — player can just sign in manually
     }
@@ -4857,7 +4899,9 @@
       state.currentUser = username;
       state.solvedRecords = await loadSolvedRecords(username);
       state.equippedFlair = await loadEquippedFlair(username);
+      state.inProgressMaze = await loadInProgressMaze(username);
       renderAccountUI();
+      renderResumeMazeButton();
       renderAchievements();
       renderFlairs();
       refreshThemeUnlocks();
@@ -4884,7 +4928,9 @@
       state.currentUser = username;
       state.solvedRecords = await loadSolvedRecords(username);
       state.equippedFlair = await loadEquippedFlair(username);
+      state.inProgressMaze = await loadInProgressMaze(username);
       renderAccountUI();
+      renderResumeMazeButton();
       renderAchievements();
       renderFlairs();
       refreshThemeUnlocks();
@@ -4901,6 +4947,7 @@
     state.currentUser = null;
     state.solvedRecords = [];
     state.equippedFlair = null;
+    state.inProgressMaze = null;
     accUsernameInput.value = '';
     accPasswordInput.value = '';
     accountNote.textContent = 'Your account syncs online — sign in from any device to pick up where you left off.';
@@ -4908,9 +4955,18 @@
     historyList.style.display = 'none';
     btnToggleHistory.textContent = '📜 View solved mazes';
     renderAccountUI();
+    renderResumeMazeButton();
     renderAchievements();
     renderFlairs();
     refreshThemeUnlocks();
+  });
+
+  document.getElementById('btnResumeMaze').addEventListener('click', () => {
+    if (!state.inProgressMaze) return;
+    const result = applyLoadedMazeData(state.inProgressMaze);
+    if (result && result.ok) {
+      showScreen('game');
+    }
   });
 
   const btnToggleHistory = document.getElementById('btnToggleHistory');
@@ -5278,24 +5334,8 @@
   document.getElementById('btnInsightsClose').addEventListener('click', () => insightsOverlay.classList.remove('show'));
   document.getElementById('btnInsightsGotIt').addEventListener('click', () => insightsOverlay.classList.remove('show'));
 
-  // ---------- UI wiring: save reminder banner ----------
-  // A lot of players never open "How to play," so this banner surfaces the
-  // one thing that actually matters — linking a folder or downloading a save
-  // file — directly on the main screen. It's permanent: it always shows, on
-  // every visit, and isn't dismissible.
-  document.getElementById('btnSaveBannerShow').addEventListener('click', () => {
-    // The Account card now lives on the sign-in screen rather than
-    // alongside the maze, so jump there first — scrolling to an element
-    // behind a hidden screen wouldn't show anything.
-    showScreen('signin');
-    const accountCard = document.getElementById('accountCard');
-    accountCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    accountCard.classList.remove('highlight-pulse');
-    // Restart the animation even if it was just played.
-    void accountCard.offsetWidth;
-    accountCard.classList.add('highlight-pulse');
-    setTimeout(() => accountCard.classList.remove('highlight-pulse'), 3300);
-  });
+  // (The old local-save reminder banner was removed — progress now saves
+  // to the player's online account automatically after every solve.)
 
   btnPeek.addEventListener('click', usePeek);
   btnUnwind.addEventListener('click', doUnwind);
@@ -5365,6 +5405,7 @@
   }
 
   document.getElementById('btnEnterGame').addEventListener('click', () => showScreen('setup'));
+  document.getElementById('btnPlayGuest').addEventListener('click', () => showScreen('setup'));
   document.getElementById('btnSetupToAccount').addEventListener('click', () => showScreen('signin'));
   document.getElementById('btnSetupNext').addEventListener('click', () => showScreen('game'));
   document.getElementById('btnGoSetup').addEventListener('click', () => showScreen('setup'));
@@ -5436,6 +5477,7 @@
   restoreSessionOnLoad().then(() => {
     if (state.currentUser) {
       renderAccountUI();
+      renderResumeMazeButton();
       renderAchievements();
       renderFlairs();
       refreshThemeUnlocks();
