@@ -2446,6 +2446,7 @@
     scrollToPlayer();
     playMazeRevealAnim();
     state.mazeReady = true;
+    syncSetupNextButton();
   }
 
   // Plays once per freshly-generated maze — a quick fade/scale/blur-in on
@@ -2550,6 +2551,7 @@
     resetProgress();
     state.cells = [];
     state.mazeReady = false;
+    syncSetupNextButton();
   }
 
   function restartMaze() {
@@ -4021,6 +4023,7 @@
       scrollToPlayer();
       playMazeRevealAnim();
       state.mazeReady = true;
+      syncSetupNextButton();
       return { ok: true, noteExtra };
     } catch (e) {
       return { ok: false };
@@ -5496,6 +5499,16 @@
     setup: document.getElementById('screenSetup'),
     game: document.getElementById('screenGame'),
   };
+  // Kept in sync with state.mazeReady from every place that changes it
+  // (applyNewMaze, applyLoadedMazeData, resetActiveMazeState) — not just on
+  // setup-screen entry, since picking a size while already on that screen
+  // doesn't re-run showScreen('setup').
+  function syncSetupNextButton() {
+    const nextBtn = document.getElementById('btnSetupNext');
+    if (!nextBtn) return;
+    nextBtn.disabled = !state.mazeReady;
+    nextBtn.title = state.mazeReady ? '' : 'Pick a maze size above first';
+  }
   function showScreen(name) {
     Object.keys(screenEls).forEach(key => {
       if (screenEls[key]) screenEls[key].style.display = (key === name) ? '' : 'none';
@@ -5506,11 +5519,7 @@
       syncSizeButtons();
       buildThemeSelect();
       buildCharSelect();
-      const nextBtn = document.getElementById('btnSetupNext');
-      if (nextBtn) {
-        nextBtn.disabled = !state.mazeReady;
-        nextBtn.title = state.mazeReady ? '' : 'Pick a maze size above first';
-      }
+      syncSetupNextButton();
     } else if (name === 'game') {
       resizeCanvas();
       draw();
