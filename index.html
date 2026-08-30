@@ -1316,13 +1316,10 @@
       <div class="card">
         <h2>Challenge a friend</h2>
         <div class="stack-gap">
-          <button class="secondary" id="btnGenChallenge">🔗 Get challenge link</button>
+          <p class="field-note">Sends this exact maze layout, fresh with no progress, straight to a friend — whoever opens it solves the very same cave, from the same start.</p>
+          <button class="primary" id="btnSendChallenge">📤 Send challenge</button>
           <textarea class="code-box" id="challengeLink" rows="2" readonly placeholder="Your link will appear here"></textarea>
-          <div class="row-2">
-            <button class="secondary" id="btnCopyChallenge">📋 Copy link</button>
-            <button class="primary" id="btnShareChallengeNative" style="display:none;">Share…</button>
-          </div>
-          <p class="field-note" id="challengeNote">Sends this exact maze layout, fresh with no progress — whoever opens the link solves the very same cave, from the same start.</p>
+          <p class="field-note" id="challengeNote"></p>
         </div>
       </div>
 
@@ -1407,6 +1404,30 @@
               <p>1. In the Account card, type a username and password and tap <b>Create account</b>.</p>
               <p>2. That's it — every solve, and your current maze, is saved to your account automatically as you play. No codes to copy or files to manage.</p>
               <p>3. Coming back later, on this device or a new one: just sign in with the same username and password, and everything picks up right where you left off.</p>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-cat" data-cat="challenge">
+        <button class="help-cat-header" type="button">
+          <span class="help-cat-emoji">📤</span>
+          <span class="help-cat-title">Challenge a friend<span class="help-cat-sub">Send someone the exact same maze</span></span>
+          <span class="help-cat-arrow">▶</span>
+        </button>
+        <div class="help-cat-body">
+          <div class="help-cat-body-inner">
+            <section>
+              <h4>Sending a challenge</h4>
+              <p>Under "Challenge a friend", tap "📤 Send challenge" to pack your current maze layout — walls and settings, but no progress — into a link and hand it straight to your device's share sheet, so you can send it through whatever app you like. If your device or browser doesn't support that share sheet, the link is copied to your clipboard instead, ready to paste anywhere.</p>
+            </section>
+            <section>
+              <h4>If sharing doesn't go through</h4>
+              <p>The link is still shown in the box below the button either way, so if you closed the share sheet or your browser doesn't support it, you can select the text yourself and copy it manually to send it another way.</p>
+            </section>
+            <section>
+              <h4>Opening a challenge</h4>
+              <p>Whoever opens the link lands straight in the exact same maze layout, from square one — no account or sign-in needed to try it.</p>
             </section>
           </div>
         </div>
@@ -5091,39 +5112,31 @@
   document.getElementById('btnFogToggle').addEventListener('click', () => setFogOfWar(!state.fogOfWar));
 
   // ---------- UI wiring: challenge link ----------
-  document.getElementById('btnGenChallenge').addEventListener('click', () => {
+  document.getElementById('btnSendChallenge').addEventListener('click', async () => {
     challengeLinkBox.value = generateChallengeLink();
-    challengeNote.textContent = 'Link generated. Anyone who opens it gets this exact maze, fresh.';
-    challengeNote.className = 'field-note success';
-  });
-
-  document.getElementById('btnCopyChallenge').addEventListener('click', async () => {
-    if (!challengeLinkBox.value) {
-      challengeNote.textContent = 'Get a challenge link first, then copy it.';
-      challengeNote.className = 'field-note error';
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Deep Delve challenge', text: 'Think you can solve this cave?', url: challengeLinkBox.value });
+        challengeNote.textContent = 'Sent! The link is below too, in case you want to send it again.';
+        challengeNote.className = 'field-note success';
+      } catch (e) {
+        // User cancelled the share sheet, or it's unsupported here — the
+        // link is generated below either way, so they can still copy it.
+        challengeNote.textContent = "Didn't send? The link is ready below — copy it to send another way.";
+        challengeNote.className = 'field-note';
+      }
       return;
     }
     try {
       await navigator.clipboard.writeText(challengeLinkBox.value);
-      challengeNote.textContent = 'Copied to clipboard.';
+      challengeNote.textContent = 'Link copied to your clipboard — paste it to a friend to send it.';
       challengeNote.className = 'field-note success';
     } catch {
       challengeLinkBox.select();
-      challengeNote.textContent = 'Select and copy the link manually.';
+      challengeNote.textContent = 'Link generated below — select and copy it manually.';
       challengeNote.className = 'field-note';
     }
   });
-
-  const btnShareChallengeNative = document.getElementById('btnShareChallengeNative');
-  if (navigator.share) {
-    btnShareChallengeNative.style.display = 'inline-block';
-    btnShareChallengeNative.addEventListener('click', async () => {
-      if (!challengeLinkBox.value) challengeLinkBox.value = generateChallengeLink();
-      try {
-        await navigator.share({ title: 'Deep Delve challenge', text: 'Think you can solve this cave?', url: challengeLinkBox.value });
-      } catch (e) { /* user cancelled the share sheet, or it's unsupported here — ignore */ }
-    });
-  }
 
   document.getElementById('btnChallengeBannerClose').addEventListener('click', () => {
     challengeBanner.style.display = 'none';
