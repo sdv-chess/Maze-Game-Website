@@ -1223,7 +1223,7 @@
             <input type="text" class="field" id="urlInput" placeholder="Paste an image URL" autocomplete="off" />
             <button id="btnUseUrl">Use</button>
           </div>
-          <p class="field-note" id="customCharNote">Uploaded images work in this session but can't be packed into a save code — link an image URL instead if you want your look to travel with your code.</p>
+          <p class="field-note" id="customCharNote">Custom images (uploaded or linked) only last for this session — you'll be back to the default explorer next time.</p>
         </div>
       </div>
 
@@ -1314,25 +1314,6 @@
       </div>
 
       <div class="card">
-        <h2>Save your run</h2>
-        <div class="stack-gap">
-          <button class="secondary" id="btnGenCode">Get save code</button>
-          <textarea class="code-box" id="saveCode" rows="3" readonly placeholder="Your code will appear here"></textarea>
-          <button class="secondary" id="btnCopyCode">Copy code</button>
-          <p class="field-note" id="saveNote">Copy this code somewhere safe. Paste it below any time to pick up right here — your path stays lit.</p>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Continue a run</h2>
-        <div class="stack-gap">
-          <input type="text" class="field" id="loadInput" placeholder="Paste your save code" autocomplete="off" />
-          <button class="secondary" id="btnLoadCode">Load code</button>
-          <p class="field-note" id="loadNote">Paste a code from a previous run to continue exactly where you left off.</p>
-        </div>
-      </div>
-
-      <div class="card">
         <h2>Challenge a friend</h2>
         <div class="stack-gap">
           <button class="secondary" id="btnGenChallenge">🔗 Get challenge link</button>
@@ -1381,7 +1362,7 @@
             </section>
             <section>
               <h4>Dead ends</h4>
-              <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze unless you already grabbed a save code for it.</p>
+              <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze.</p>
             </section>
           </div>
         </div>
@@ -1411,24 +1392,20 @@
       <div class="help-cat" data-cat="saving">
         <button class="help-cat-header" type="button">
           <span class="help-cat-emoji">💾</span>
-          <span class="help-cat-title">Saving your progress<span class="help-cat-sub">Save codes, accounts, history</span></span>
+          <span class="help-cat-title">Saving your progress<span class="help-cat-sub">Accounts, history</span></span>
           <span class="help-cat-arrow">▶</span>
         </button>
         <div class="help-cat-body">
           <div class="help-cat-body-inner">
             <section>
-              <h4>Save codes</h4>
-              <p>Save codes are for pausing and resuming a single maze. Under "Save your run", tap "Get save code" to turn your current maze — walls, position and path — into a text code, then "Copy code" to copy it somewhere safe. To pick that maze back up (even in a different browser tab or later session), paste the code into the "Continue a run" box and tap "Load code" — you'll land back exactly where you left off, path still lit.</p>
-            </section>
-            <section>
               <h4>Accounts &amp; history</h4>
-              <p>Create an account to track your solved mazes and badges — it's saved to a file on your own device, never a server. Your solve history is grouped by maze category — Small, Medium, Large, Custom and Level Mode are all kept separate, so your custom-size solves and your Level mode progress never get mixed together.</p>
+              <p>Create an account to track your solved mazes and badges, and to pick a maze back up right where you left it. Your solve history is grouped by maze category — Small, Medium, Large, Custom and Level Mode are all kept separate, so your custom-size solves and your Level mode progress never get mixed together.</p>
             </section>
             <section>
               <h4>Your account — quick steps</h4>
-              <p>Your account, badges and history are saved online, kept separate from single-maze save codes above.</p>
+              <p>Your account, badges, history and in-progress maze are all saved online under your username.</p>
               <p>1. In the Account card, type a username and password and tap <b>Create account</b>.</p>
-              <p>2. That's it — every solve is saved to your account automatically as you play. No files to manage.</p>
+              <p>2. That's it — every solve, and your current maze, is saved to your account automatically as you play. No codes to copy or files to manage.</p>
               <p>3. Coming back later, on this device or a new one: just sign in with the same username and password, and everything picks up right where you left off.</p>
             </section>
           </div>
@@ -1977,7 +1954,7 @@
     { id: 'flawless',     icon: '✨', name: 'Flawless',     desc: 'Solve a maze without hitting a dead end.', category: 'general', rank: 'platinum', check: r => r.some(x => x.clean) },
     { id: 'big_delver',   icon: '🗻', name: 'Big Delver',   desc: 'Solve a maze at least 20×20.', category: 'general', rank: 'silver',   check: r => r.some(x => x.cols >= 20 && x.rows >= 20) },
     { id: 'cartographer', icon: '🧭', name: 'Cartographer', desc: 'Solve a maze with a custom size.', category: 'general', rank: 'bronze',   check: r => r.some(x => x.custom) },
-    { id: 'comeback',     icon: '💾', name: 'Comeback',     desc: 'Finish a maze you continued from a save code.', category: 'general', rank: 'bronze', check: r => r.some(x => x.fromLoad) }
+    { id: 'comeback',     icon: '💾', name: 'Comeback',     desc: 'Finish a maze you resumed from your account.', category: 'general', rank: 'bronze', check: r => r.some(x => x.fromLoad) }
   ];
 
   // ---------- Delve Count milestones: solve N mazes total, escalating flare per tier ----------
@@ -2220,10 +2197,6 @@
   const btnStartLevel = document.getElementById('btnStartLevel');
   const levelProgressCount = document.getElementById('levelProgressCount');
   const levelProgressFill = document.getElementById('levelProgressFill');
-  const saveCodeBox = document.getElementById('saveCode');
-  const saveNote = document.getElementById('saveNote');
-  const loadInput = document.getElementById('loadInput');
-  const loadNote = document.getElementById('loadNote');
   const winOverlay = document.getElementById('winOverlay');
   const winIcon = document.getElementById('winIcon');
   const winStats = document.getElementById('winStats');
@@ -2400,9 +2373,6 @@
     if (statTimeLabel) statTimeLabel.textContent = state.timeLimit ? 'Time left' : 'Time';
     if (timeLimitNote) timeLimitNote.style.display = state.timeLimit ? 'block' : 'none';
     resetProgress();
-    saveCodeBox.value = '';
-    saveNote.textContent = 'Copy this code somewhere safe. Paste it below any time to pick up right here — your path stays lit.';
-    saveNote.className = 'field-note';
     resizeCanvas();
     draw();
     scrollToPlayer();
@@ -2468,7 +2438,7 @@
     if (hasUnsavedRun()) {
       showConfirm({
         title: 'Start a new maze?',
-        body: `You're mid-run — ${state.moves} move${state.moves === 1 ? '' : 's'} in — and this maze will be lost if you don't have a save code for it.`,
+        body: `You're mid-run — ${state.moves} move${state.moves === 1 ? '' : 's'} in — and this maze will be lost${state.currentUser ? '' : ' (sign in to auto-save your progress)'}.`,
         okLabel: 'New maze',
         onConfirm: newMazeCurrentSize
       });
@@ -3744,8 +3714,8 @@
       customImgLoaded = true;
       state.customImageSrc = fromUpload ? null : src;
       customCharNote.textContent = fromUpload
-        ? "Loaded. Uploaded images stay in this session only — they aren't included in save codes."
-        : "Loaded. This image link will be included in your save code.";
+        ? "Loaded. Uploaded images stay in this session only."
+        : "Loaded. This image link only lasts for this session too.";
       customCharNote.className = 'field-note success';
       draw();
     };
@@ -3879,32 +3849,10 @@
     btn.style.display = state.currentUser && state.inProgressMaze ? 'block' : 'none';
   }
 
-  function generateSaveCode() {
-    const payload = buildSavePayload();
-    const json = JSON.stringify(payload);
-    let b64 = btoa(unescape(encodeURIComponent(json)));
-    b64 = b64.replace(/=+$/, '');
-    const grouped = b64.match(/.{1,6}/g).join('-');
-    return grouped;
-  }
-
-  function loadFromCode(code) {
-    try {
-      const clean = code.trim().replace(/\s+/g, '').split('-').join('');
-      const pad = clean.length % 4 === 0 ? '' : '='.repeat(4 - (clean.length % 4));
-      const json = decodeURIComponent(escape(atob(clean + pad)));
-      const data = JSON.parse(json);
-      if (!data || !data.c || !data.r || !data.w) throw new Error('bad payload');
-      return applyLoadedMazeData(data);
-    } catch (e) {
-      return { ok: false };
-    }
-  }
-
-  // Shared by both "Continue a run" save codes and challenge links — both
-  // just decode to the same payload shape and land here to actually put the
-  // maze on screen. Challenge links call this with px/py/mv/s/t all zeroed
-  // out, so a fresh run is what gets applied.
+  // Used by account autosave/resume and by challenge links — both decode to
+  // the same payload shape and land here to actually put the maze on screen.
+  // Challenge links call this with px/py/mv/s/t all zeroed out, so a fresh
+  // run is what gets applied.
   function applyLoadedMazeData(data) {
     try {
       state.cols = data.c;
@@ -3953,10 +3901,10 @@
         customHeight.value = data.r;
       }
 
-      // v3 save codes carry their own time limit / hint budget so a custom
-      // mode maze replays with exactly the settings it was generated with,
+      // v3 payloads carry their own time limit / hint budget so a custom
+      // mode maze resumes with exactly the settings it was generated with,
       // regardless of whatever the Hints / Time limit fields currently show.
-      // Older (v2 and earlier) codes lack these fields — fall back to the
+      // Older (v2 and earlier) payloads lack these fields — fall back to the
       // same defaults applyNewMaze would have used at the time.
       state.timeLimit = (typeof data.tl === 'number' && data.tl > 0) ? data.tl : (TIME_LIMITS[state.sizeKey] || null);
       state.peekLimit = (typeof data.pl === 'number') ? Math.max(0, data.pl) : computePeekLimit(state.cols, state.rows);
@@ -3997,11 +3945,10 @@
   }
 
   // ---------- Challenge links ----------
-  // A challenge link is the same payload shape as a save code — walls plus
-  // settings — but always with a fresh start (no position, trail, moves or
-  // time carried over), and it travels in the URL hash instead of a copyable
-  // text code. Whoever opens the link lands on the exact same maze layout,
-  // from square one.
+  // A challenge link is the same payload shape used for account autosave —
+  // walls plus settings — but always with a fresh start (no position, trail,
+  // moves or time carried over), and it travels in the URL hash. Whoever
+  // opens the link lands on the exact same maze layout, from square one.
   function buildChallengePayload() {
     const startTrail = trailToHex(new Set(['0,0']), state.cols, state.rows);
     const payload = {
@@ -4041,11 +3988,10 @@
     return url.toString();
   }
 
-  // Distinct from loadFromCode's decoder because save codes use '-' purely
-  // as human-readability grouping (stripped on load) — reusing that parser
-  // here would mangle the '-' that base64url encoding can legitimately
-  // produce. Once decoded to JSON, though, it's the same payload shape, so
-  // it hands off to the same applyLoadedMazeData used by save codes.
+  // Uses base64url decoding (not the plain base64 the account payload uses)
+  // since '-' and '_' are legitimate characters in a base64url string here.
+  // Once decoded to JSON, though, it's the same payload shape, so it hands
+  // off to the same applyLoadedMazeData used for account resume.
   function applyChallengeFromHash() {
     const m = location.hash.match(/challenge=([^&]+)/);
     if (!m) return false;
@@ -5143,42 +5089,6 @@
   document.getElementById('btnRestart').addEventListener('click', restartMaze);
   document.getElementById('btnToggleSound').addEventListener('click', () => setSoundEnabled(!soundEnabled));
   document.getElementById('btnFogToggle').addEventListener('click', () => setFogOfWar(!state.fogOfWar));
-
-  document.getElementById('btnGenCode').addEventListener('click', () => {
-    saveCodeBox.value = generateSaveCode();
-    saveNote.textContent = 'Code generated. Copy it before you close this tab.';
-    saveNote.className = 'field-note success';
-  });
-
-  document.getElementById('btnCopyCode').addEventListener('click', async () => {
-    if (!saveCodeBox.value) {
-      saveNote.textContent = 'Get a save code first, then copy it.';
-      saveNote.className = 'field-note error';
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(saveCodeBox.value);
-      saveNote.textContent = 'Copied to clipboard.';
-      saveNote.className = 'field-note success';
-    } catch {
-      saveCodeBox.select();
-      saveNote.textContent = 'Select and copy the code manually.';
-      saveNote.className = 'field-note';
-    }
-  });
-
-  document.getElementById('btnLoadCode').addEventListener('click', () => {
-    const result = loadFromCode(loadInput.value);
-    if (result.ok) {
-      loadNote.textContent = 'Loaded. Your path is lit right where you left it.' + (result.noteExtra || '');
-      loadNote.className = 'field-note success';
-      winOverlay.classList.remove('show');
-      loseOverlay.classList.remove('show');
-    } else {
-      loadNote.textContent = "That code doesn't match a maze. Check it and try again.";
-      loadNote.className = 'field-note error';
-    }
-  });
 
   // ---------- UI wiring: challenge link ----------
   document.getElementById('btnGenChallenge').addEventListener('click', () => {
