@@ -2221,7 +2221,8 @@
     paused: false,
     pauseUsed: false,
     fogOfWar: false,
-    mmPulses: []
+    mmPulses: [],
+    mazeReady: false
   };
 
   let customImg = null;
@@ -2444,6 +2445,7 @@
     draw();
     scrollToPlayer();
     playMazeRevealAnim();
+    state.mazeReady = true;
   }
 
   // Plays once per freshly-generated maze — a quick fade/scale/blur-in on
@@ -2538,6 +2540,16 @@
     syncUnwindButton();
     syncPauseButton();
     pauseOverlay.classList.remove('show');
+  }
+
+  // Clears the maze currently loaded in memory — not just moves/timer, but
+  // the walls and trail themselves. Called whenever the signed-in player
+  // changes (sign in, sign up, sign out), so a maze generated for one
+  // account can never be shown to the next one who picks up the device.
+  function resetActiveMazeState() {
+    resetProgress();
+    state.cells = [];
+    state.mazeReady = false;
   }
 
   function restartMaze() {
@@ -4008,6 +4020,7 @@
       draw();
       scrollToPlayer();
       playMazeRevealAnim();
+      state.mazeReady = true;
       return { ok: true, noteExtra };
     } catch (e) {
       return { ok: false };
@@ -5027,6 +5040,7 @@
     const result = await createAccount(username, password);
     if (result.ok) {
       state.currentUser = username;
+      resetActiveMazeState();
       state.solvedRecords = await loadSolvedRecords(username);
       state.equippedFlair = await loadEquippedFlair(username);
       state.inProgressMaze = await loadInProgressMaze(username);
@@ -5056,6 +5070,7 @@
     const result = await signIn(username, password);
     if (result.ok) {
       state.currentUser = username;
+      resetActiveMazeState();
       state.solvedRecords = await loadSolvedRecords(username);
       state.equippedFlair = await loadEquippedFlair(username);
       state.inProgressMaze = await loadInProgressMaze(username);
@@ -5075,6 +5090,7 @@
   document.getElementById('btnSignOut').addEventListener('click', async () => {
     await signOutOnline();
     state.currentUser = null;
+    resetActiveMazeState();
     state.solvedRecords = [];
     state.equippedFlair = null;
     state.inProgressMaze = null;
@@ -5490,6 +5506,11 @@
       syncSizeButtons();
       buildThemeSelect();
       buildCharSelect();
+      const nextBtn = document.getElementById('btnSetupNext');
+      if (nextBtn) {
+        nextBtn.disabled = !state.mazeReady;
+        nextBtn.title = state.mazeReady ? '' : 'Pick a maze size above first';
+      }
     } else if (name === 'game') {
       resizeCanvas();
       draw();
