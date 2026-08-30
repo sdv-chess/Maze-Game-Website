@@ -14,6 +14,7 @@ Deep Delve is a browser-based maze game with no backtracking — you get a limit
 - **No-backtrack gameplay** — walk into a dead end and the run is over, unless you spend one of your limited **Unwinds** (step back one cell) or use a **Peek** (briefly reveals the way forward). Budgets scale with maze size
 - **Level Mode** — an endless staircase of mazes that grows wider, taller, and tougher every level, with jump-to-level navigation
 - **Sprint & Marathon modes** — an 8×8 maze against a 1-minute clock, or a sprawling 60×60 grind
+- **Daily Maze** — one shared maze per day, seeded from the date so everyone gets the exact same layout, with a **leaderboard** ranking today's fastest signed-in solvers
 - **Fog of war** — optional setting that only lights the cave near your character, leaving the rest dark until explored
 - **Challenge a friend** — pack your current maze (layout + settings, no progress) into a shareable link; whoever opens it drops straight into the same maze
 - **Replay & practice** — step or play back any solved run, then click into the maze to practice from any point, separate from your recorded path
@@ -46,10 +47,13 @@ Deep Delve is a single static HTML file, so there's nothing to build:
 
 Account features (sign-in, saved progress, badges) require a connected Supabase project. Without one, the game still works in guest mode, but progress won't be saved.
 
+The Daily Maze leaderboard reads from a separate `daily_scores` table (kept apart from the private `accounts` table since a leaderboard needs to read everyone's scores, not just your own). Run [`daily_leaderboard_setup.sql`](./daily_leaderboard_setup.sql) once in your Supabase project's SQL editor to create it before the leaderboard will work.
+
 ## Project structure
 
 ```
-index.html   # the entire app — markup, styles, and game logic
+index.html                     # the entire app — markup, styles, and game logic
+daily_leaderboard_setup.sql    # one-time Supabase setup for the Daily Maze leaderboard
 ```
 
 ## Feedback
