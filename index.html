@@ -1093,17 +1093,6 @@
     <div class="card" id="accountCard">
       <h2>Account</h2>
 
-      <div class="stack-gap" id="storageSection">
-        <p class="field-note" id="storageStatus">Checking save location…</p>
-        <div class="row-2">
-          <button class="secondary" id="btnChooseFolder" style="display:none;">Choose save folder</button>
-          <button class="secondary" id="btnReconnectFolder" style="display:none;">Reconnect folder</button>
-          <button class="secondary" id="btnDownloadFile">Download save file</button>
-          <button class="secondary" id="btnLoadFileTrigger">Load save file</button>
-        </div>
-        <input type="file" id="storageFileInput" accept="application/json" style="display:none;" />
-      </div>
-
       <div id="accountLoggedOut" class="stack-gap">
         <input type="text" class="field" id="accUsernameInput" placeholder="Username" autocomplete="off" />
         <input type="password" class="field" id="accPasswordInput" placeholder="Password" autocomplete="off" />
@@ -1111,7 +1100,7 @@
           <button class="secondary" id="btnSignIn">Sign in</button>
           <button class="primary" id="btnCreateAccount">Create account</button>
         </div>
-        <p class="field-note" id="accountNote">Your account is saved to a file on your computer, not to a server. Your password is hashed before saving, but this still isn't high-security — don't reuse an important password.</p>
+        <p class="field-note" id="accountNote">Your account syncs online — sign in from any device to pick up where you left off.</p>
       </div>
 
       <div id="accountLoggedIn" class="stack-gap" style="display:none;">
@@ -1719,9 +1708,19 @@
 </div>
 <canvas class="confetti-canvas" id="confettiCanvas"></canvas>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function(){
   "use strict";
+
+  // ---------- Online accounts (Supabase) ----------
+  const SUPABASE_URL = 'https://mfcpytxbfpbdrozkefnh.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_z178rstI26f1SsZM2FVRRQ_Clltr6u-';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // Usernames are stored lowercased as the unique key. Supabase Auth needs an
+  // email-shaped identifier, so we map "username" -> "username@deepdelve.local"
+  // under the hood — players never see or type an email.
+  function usernameToEmail(username) { return `${username.toLowerCase()}@deepdelve.local`; }
 
   // ---------- Config ----------
   const SIZES = {
@@ -4352,238 +4351,110 @@
     if (nowOpen) expandedHistoryCats.add(key); else expandedHistoryCats.delete(key);
   });
 
-  // ---------- Local save file (accounts live on YOUR computer, not a server) ----------
-  const SAVE_FILE_NAME = 'deep-delve-save.json';
-  const IDB_DB = 'deepDelveFS';
-  const IDB_STORE = 'handles';
-  const IDB_KEY = 'saveDirHandle';
-
-  let saveDirHandle = null;      // FileSystemDirectoryHandle, when connected
-  let folderPermState = 'none';  // 'granted' | 'prompt' | 'none'
-  let localStore = null;         // in-memory cache of { [username]: { passwordHash, createdAt, solvedRecords } }
-  let storeLoadedFromFolder = false;
-
-  function fsSupported() {
-    return typeof window.showDirectoryPicker === 'function';
-  }
-
-  function idbOpen() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(IDB_DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  async function idbSet(key, val) {
-    const db = await idbOpen();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put(val, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-  async function idbGet(key) {
-    const db = await idbOpen();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(key);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  async function hashPassword(pw) {
-    const enc = new TextEncoder().encode(pw);
-    const buf = await crypto.subtle.digest('SHA-256', enc);
-    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  function emptyStore() { return {}; }
-
-  async function ensureStoreLoaded() {
-    if (localStore) return localStore;
-    if (saveDirHandle && folderPermState === 'granted') {
-      try {
-        const fileHandle = await saveDirHandle.getFileHandle(SAVE_FILE_NAME, { create: true });
-        const file = await fileHandle.getFile();
-        const text = await file.text();
-        localStore = text ? JSON.parse(text) : emptyStore();
-        storeLoadedFromFolder = true;
-      } catch (e) {
-        localStore = emptyStore();
-      }
-    } else {
-      localStore = emptyStore();
-    }
-    return localStore;
-  }
-
-  async function persistStore() {
-    if (!saveDirHandle || folderPermState !== 'granted') return;
-    try {
-      const fileHandle = await saveDirHandle.getFileHandle(SAVE_FILE_NAME, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(localStore, null, 2));
-      await writable.close();
-    } catch (e) {
-      // Folder write failed (e.g. permission revoked) — data still lives in memory / can be downloaded.
-    }
-  }
-
-  function sanitizeFileName(name) {
-    // Keep it filesystem-safe: letters, numbers, dash, underscore only.
-    const cleaned = name.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    return cleaned || 'deep-delve-save';
-  }
-
-  function downloadStore() {
-    const store = localStore || emptyStore();
-    let data = store;
-    let fileName = SAVE_FILE_NAME;
-    if (state.currentUser) {
-      const key = state.currentUser.toLowerCase();
-      // Export just the signed-in user's record, named after their username.
-      if (store[key]) data = { [key]: store[key] };
-      fileName = `${sanitizeFileName(key)}.json`;
-    }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function mergeStore(imported) {
-    // Imported accounts win on conflict (an explicit load is treated as "use this file").
-    localStore = { ...(localStore || emptyStore()), ...imported };
-  }
-
-  async function connectFolder(isReconnect) {
-    if (!fsSupported()) return false;
-    try {
-      let handle = saveDirHandle;
-      if (!handle) {
-        handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      }
-      const perm = await handle.requestPermission({ mode: 'readwrite' });
-      if (perm !== 'granted') return false;
-      saveDirHandle = handle;
-      folderPermState = 'granted';
-      await idbSet(IDB_KEY, handle);
-      const priorInMemory = localStore;
-      localStore = null;
-      await ensureStoreLoaded();
-      // If we already had in-memory accounts (e.g. from a manual load this session) and the
-      // folder's file was empty, seed the folder with what we had so nothing is lost.
-      if (priorInMemory && Object.keys(priorInMemory).length && !storeLoadedFromFolder) {
-        mergeStore(priorInMemory);
-      } else if (priorInMemory && !Object.keys(localStore).length) {
-        mergeStore(priorInMemory);
-      }
-      await persistStore();
-      return true;
-    } catch (e) {
-      return false; // user cancelled the picker or permission dialog
-    }
-  }
-
-  async function restoreFolderOnLoad() {
-    if (!fsSupported()) return;
-    try {
-      const handle = await idbGet(IDB_KEY);
-      if (!handle) return;
-      const perm = await handle.queryPermission({ mode: 'readwrite' });
-      saveDirHandle = handle;
-      folderPermState = perm; // 'granted' | 'prompt' | 'denied'
-      if (perm === 'granted') await ensureStoreLoaded();
-    } catch (e) {
-      // no stored handle, or it's stale — fine, user can choose a folder again
-    }
-  }
-
-  function renderStorageStatus() {
-    const status = document.getElementById('storageStatus');
-    const btnChoose = document.getElementById('btnChooseFolder');
-    const btnReconnect = document.getElementById('btnReconnectFolder');
-
-    if (saveDirHandle && folderPermState === 'granted') {
-      status.textContent = `📁 Auto-saving to "${saveDirHandle.name}/${SAVE_FILE_NAME}" on your computer.`;
-      btnChoose.style.display = 'none';
-      btnReconnect.style.display = 'none';
-    } else if (saveDirHandle && folderPermState === 'prompt') {
-      status.textContent = `Save folder "${saveDirHandle.name}" needs to be reconnected for this session.`;
-      btnChoose.style.display = 'none';
-      btnReconnect.style.display = '';
-    } else if (fsSupported()) {
-      status.textContent = 'Choose a folder to auto-save your account there — or use download/load below.';
-      btnChoose.style.display = '';
-      btnReconnect.style.display = 'none';
-    } else {
-      status.textContent = "This browser can't auto-save to a folder — use download/load below to carry your save file between sessions.";
-      btnChoose.style.display = 'none';
-      btnReconnect.style.display = 'none';
-    }
-  }
+  // ---------- Account storage (Supabase — accounts live online, not on this device) ----------
 
   // ---------- Account storage ----------
   async function getAccount(username) {
-    const store = await ensureStoreLoaded();
-    return store[username.toLowerCase()] || null;
+    const { data, error } = await sb
+      .from('accounts')
+      .select('username, solved_records, equipped_flair')
+      .eq('username', username.toLowerCase())
+      .maybeSingle();
+    if (error || !data) return null;
+    return data;
   }
 
   async function createAccount(username, password) {
-    const store = await ensureStoreLoaded();
     const key = username.toLowerCase();
-    if (store[key]) return { ok: false, msg: 'That username is taken. Try another, or sign in instead.' };
-    store[key] = { passwordHash: await hashPassword(password), createdAt: Date.now(), solvedRecords: [] };
-    await persistStore();
-    if (!saveDirHandle) {
-      return { ok: true, warn: "No save folder connected — download your save file so you don't lose this account." };
+    if (!/^[a-z0-9_-]{3,20}$/.test(key)) {
+      return { ok: false, msg: 'Usernames must be 3-20 characters: letters, numbers, - or _ only.' };
+    }
+    const existing = await getAccount(key);
+    if (existing) return { ok: false, msg: 'That username is taken. Try another, or sign in instead.' };
+
+    const { data: signUpData, error: signUpError } = await sb.auth.signUp({
+      email: usernameToEmail(key),
+      password,
+    });
+    if (signUpError) {
+      if (/already registered/i.test(signUpError.message || '')) {
+        return { ok: false, msg: 'That username is taken. Try another, or sign in instead.' };
+      }
+      if (/password/i.test(signUpError.message || '')) {
+        return { ok: false, msg: 'Password must be at least 6 characters.' };
+      }
+      return { ok: false, msg: "Couldn't create that account — check your connection and try again." };
+    }
+    const userId = signUpData.user && signUpData.user.id;
+    if (!userId) return { ok: false, msg: "Couldn't create that account — try again." };
+
+    const { error: insertError } = await sb
+      .from('accounts')
+      .insert({ id: userId, username: key, solved_records: [], equipped_flair: null });
+    if (insertError) {
+      return { ok: false, msg: 'That username is taken. Try another, or sign in instead.' };
     }
     return { ok: true };
   }
 
   async function signIn(username, password) {
-    const store = await ensureStoreLoaded();
-    const data = store[username.toLowerCase()];
-    if (!data) return { ok: false, msg: 'No account with that username in the current save. Create one, or load your save file first.' };
-    const hash = await hashPassword(password);
-    if (data.passwordHash !== hash) return { ok: false, msg: 'Wrong password.' };
+    const key = username.toLowerCase();
+    const { error } = await sb.auth.signInWithPassword({
+      email: usernameToEmail(key),
+      password,
+    });
+    if (error) {
+      return { ok: false, msg: 'Wrong username or password.' };
+    }
     return { ok: true };
   }
 
+  async function signOutOnline() {
+    try { await sb.auth.signOut(); } catch (e) { /* best effort */ }
+  }
+
   async function loadSolvedRecords(username) {
-    const store = await ensureStoreLoaded();
-    const data = store[username.toLowerCase()];
-    return data ? (data.solvedRecords || []) : [];
+    const data = await getAccount(username);
+    return data ? (data.solved_records || []) : [];
   }
 
   async function saveSolvedRecords(username, records) {
-    const store = await ensureStoreLoaded();
-    const key = username.toLowerCase();
-    if (!store[key]) return;
-    store[key].solvedRecords = records;
-    await persistStore();
+    await sb
+      .from('accounts')
+      .update({ solved_records: records })
+      .eq('username', username.toLowerCase());
   }
 
   async function loadEquippedFlair(username) {
-    const store = await ensureStoreLoaded();
-    const data = store[username.toLowerCase()];
-    return data ? (data.equippedFlair || null) : null;
+    const data = await getAccount(username);
+    return data ? (data.equipped_flair || null) : null;
   }
 
   async function saveEquippedFlair(username, badgeId) {
-    const store = await ensureStoreLoaded();
-    const key = username.toLowerCase();
-    if (!store[key]) return;
-    store[key].equippedFlair = badgeId;
-    await persistStore();
+    await sb
+      .from('accounts')
+      .update({ equipped_flair: badgeId })
+      .eq('username', username.toLowerCase());
+  }
+
+  // On page load, restore an existing online session (if any) so returning
+  // players don't have to sign in again on the same device/browser.
+  async function restoreSessionOnLoad() {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session || !session.user) return;
+      const { data } = await sb
+        .from('accounts')
+        .select('username, solved_records, equipped_flair')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!data) return;
+      state.currentUser = data.username;
+      state.solvedRecords = data.solved_records || [];
+      state.equippedFlair = data.equipped_flair || null;
+    } catch (e) {
+      // no session, or offline — player can just sign in manually
+    }
   }
 
   function renderAccountUI() {
@@ -5025,13 +4896,14 @@
     }
   });
 
-  document.getElementById('btnSignOut').addEventListener('click', () => {
+  document.getElementById('btnSignOut').addEventListener('click', async () => {
+    await signOutOnline();
     state.currentUser = null;
     state.solvedRecords = [];
     state.equippedFlair = null;
     accUsernameInput.value = '';
     accPasswordInput.value = '';
-    accountNote.textContent = "Your account is saved to a file on your computer, not to a server. Your password is hashed before saving, but this still isn't high-security — don't reuse an important password.";
+    accountNote.textContent = 'Your account syncs online — sign in from any device to pick up where you left off.';
     accountNote.className = 'field-note';
     historyList.style.display = 'none';
     btnToggleHistory.textContent = '📜 View solved mazes';
@@ -5046,63 +4918,6 @@
     const isHidden = historyList.style.display === 'none';
     historyList.style.display = isHidden ? 'flex' : 'none';
     btnToggleHistory.textContent = isHidden ? '📜 Hide solved mazes' : '📜 View solved mazes';
-  });
-
-  // ---------- UI wiring: save location ----------
-  document.getElementById('btnChooseFolder').addEventListener('click', async () => {
-    const status = document.getElementById('storageStatus');
-    status.textContent = 'Waiting for folder selection…';
-    const ok = await connectFolder(false);
-    renderStorageStatus();
-    if (!ok) {
-      status.textContent = "Couldn't connect a folder — you can still use download/load below.";
-    }
-  });
-
-  document.getElementById('btnReconnectFolder').addEventListener('click', async () => {
-    const ok = await connectFolder(true);
-    renderStorageStatus();
-    if (!ok) {
-      document.getElementById('storageStatus').textContent = "Couldn't reconnect — pick a folder again, or use download/load below.";
-    }
-  });
-
-  document.getElementById('btnDownloadFile').addEventListener('click', async () => {
-    await ensureStoreLoaded();
-    downloadStore();
-    accountNote.textContent = 'Save file downloaded — keep it safe, it holds your account and progress.';
-    accountNote.className = 'field-note success';
-  });
-
-  document.getElementById('btnLoadFileTrigger').addEventListener('click', () => {
-    document.getElementById('storageFileInput').click();
-  });
-
-  document.getElementById('storageFileInput').addEventListener('change', async (e) => {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const imported = JSON.parse(text);
-      await ensureStoreLoaded();
-      mergeStore(imported);
-      await persistStore();
-      accountNote.textContent = 'Save file loaded. Sign in to one of its accounts below.';
-      accountNote.className = 'field-note success';
-      // If the currently signed-in user's data changed, refresh their view.
-      if (state.currentUser) {
-        state.solvedRecords = await loadSolvedRecords(state.currentUser);
-        state.equippedFlair = await loadEquippedFlair(state.currentUser);
-        renderAccountSummary();
-        renderAchievements();
-        renderFlairs();
-        refreshThemeUnlocks();
-      }
-    } catch (err) {
-      accountNote.textContent = "That file doesn't look like a Deep Delve save file.";
-      accountNote.className = 'field-note error';
-    }
   });
 
   // ---------- UI wiring: characters ----------
@@ -5554,41 +5369,16 @@
   document.getElementById('btnSetupNext').addEventListener('click', () => showScreen('game'));
   document.getElementById('btnGoSetup').addEventListener('click', () => showScreen('setup'));
   // Lets a signed-in player log out directly from the maze screen, reusing
-  // the same sign-out logic as the Account card (which also resets state
-  // and returns to the sign-in screen).
-  // Logging out from the maze screen first makes sure the latest changes
-  // are actually saved somewhere durable, since a player might be mid-run
-  // with nothing written to disk yet. On a browser that supports linking a
-  // local folder (most laptops running Chrome/Edge/Brave), it saves there —
-  // prompting to choose one first if none is linked yet. Otherwise (Safari,
-  // most mobile browsers) it falls back to downloading a save file the
-  // player can use to replace their old one.
+  // the same sign-out logic as the Account card. Progress is already saved
+  // online after every solve, so logging out just needs to confirm and
+  // sign out — no local file handling required.
   document.getElementById('btnGameLogout').addEventListener('click', () => {
     if (!state.currentUser) { document.getElementById('btnSignOut').click(); return; }
-    const hasFolder = saveDirHandle && folderPermState === 'granted';
-    let body;
-    if (hasFolder) {
-      body = `Your account is linked to "${saveDirHandle.name}/${SAVE_FILE_NAME}" on this computer. Logging out will save your latest progress there first, then sign you out.`;
-    } else if (fsSupported()) {
-      body = "Logging out will ask you to choose a folder to save your latest progress to on this computer. If you cancel that, it'll download a save file instead — replace your old save file with it to keep your progress.";
-    } else {
-      const dlName = `${sanitizeFileName(state.currentUser.toLowerCase())}.json`;
-      body = `This browser can't auto-save to a folder, so logging out will download "${dlName}" with your latest progress — replace your old save file with this one to keep it.`;
-    }
     showConfirm({
-      title: 'Save & log out?',
-      body,
-      okLabel: 'Save & log out',
+      title: 'Log out?',
+      body: 'Your progress is already saved to your account online — you can sign back in on any device.',
+      okLabel: 'Log out',
       onConfirm: async () => {
-        if (hasFolder) {
-          await persistStore();
-        } else if (fsSupported()) {
-          const connected = await connectFolder(false);
-          if (!connected) downloadStore(); // picker cancelled or failed — fall back to a download
-          else renderStorageStatus();
-        } else {
-          downloadStore();
-        }
         document.getElementById('btnSignOut').click();
       }
     });
@@ -5641,8 +5431,16 @@
   }
   requestAnimationFrame(animLoop);
 
-  renderStorageStatus();
-  restoreFolderOnLoad().then(renderStorageStatus);
+  // If the player already has an online session on this browser, restore it
+  // and refresh the UI that depends on account state once it's back.
+  restoreSessionOnLoad().then(() => {
+    if (state.currentUser) {
+      renderAccountUI();
+      renderAchievements();
+      renderFlairs();
+      refreshThemeUnlocks();
+    }
+  });
 
   // A challenge link should drop the recipient straight into the maze
   // they were sent, not make them click through sign-in and setup first.
