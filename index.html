@@ -910,6 +910,26 @@
     background: var(--panel-2);
     border: 1px solid var(--border);
     font-size: 12.5px;
+    animation: lbRowIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .lb-row:nth-child(1)  { animation-delay: 0.02s; }
+  .lb-row:nth-child(2)  { animation-delay: 0.05s; }
+  .lb-row:nth-child(3)  { animation-delay: 0.08s; }
+  .lb-row:nth-child(4)  { animation-delay: 0.11s; }
+  .lb-row:nth-child(5)  { animation-delay: 0.14s; }
+  .lb-row:nth-child(6)  { animation-delay: 0.17s; }
+  .lb-row:nth-child(7)  { animation-delay: 0.20s; }
+  .lb-row:nth-child(8)  { animation-delay: 0.23s; }
+  .lb-row:nth-child(9)  { animation-delay: 0.26s; }
+  .lb-row:nth-child(10) { animation-delay: 0.29s; }
+  @keyframes lbRowIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .lb-row.rank-1 { animation: lbRowIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) backwards, lbTopRowGlow 2.2s ease-in-out 0.4s infinite; }
+  @keyframes lbTopRowGlow {
+    0%, 100% { box-shadow: 0 0 0 1px var(--border); }
+    50% { box-shadow: 0 0 0 1px rgba(232,197,71,0.55), 0 0 10px rgba(232,197,71,0.3); }
   }
   .lb-row.me { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; }
   .lb-rank { width: 26px; flex: none; text-align: center; font-family: var(--font-display); color: var(--text-muted); }
@@ -918,6 +938,7 @@
   .lb-row.rank-3 .lb-rank { color: #CD9B6A; }
   .lb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
   .lb-row.me .lb-name::after { content: ' (you)'; color: var(--teal); }
+  .lb-champion-tag { display: inline-block; animation: badgeToastPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; animation-delay: 0.3s; }
   .lb-stats { flex: none; color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; }
   .lb-clean { flex: none; font-size: 12px; }
   .lb-empty { font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 18px 0; }
@@ -931,8 +952,40 @@
     border-radius: 10px;
     padding: 9px 12px;
     margin: -2px 0 12px;
+    animation: lbChampionIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-  .lb-champion-icon { font-size: 20px; flex: none; line-height: 1; }
+  @keyframes lbChampionIn {
+    0%   { opacity: 0; transform: scale(0.9) translateY(-6px); }
+    100% { opacity: 1; transform: none; }
+  }
+  /* Every tier here reads as a win — the escalation is in crown count and
+     glow intensity, never in "starting from a low-value metal" the way the
+     regular achievement badges do. */
+  .lb-champion-banner.tier-champion {
+    box-shadow: 0 0 10px rgba(232,197,71,0.25);
+  }
+  .lb-champion-banner.tier-elite {
+    border-color: rgba(232,197,71,0.55);
+    animation: lbChampionIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), badgeShimmer 2.6s ease-in-out 0.5s infinite;
+  }
+  .lb-champion-banner.tier-legend {
+    border-color: rgba(232,197,71,0.65);
+    background: linear-gradient(135deg, rgba(232,197,71,0.22), rgba(181,131,247,0.1));
+    animation: lbChampionIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), badgeShimmer 1.9s ease-in-out 0.5s infinite;
+  }
+  .lb-champion-banner.tier-eternal {
+    border-color: rgba(255,107,107,0.55);
+    background: linear-gradient(135deg, rgba(255,107,107,0.14), rgba(181,131,247,0.14));
+    animation: lbChampionIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), badgeShimmerMythic 1.8s ease-in-out 0.5s infinite;
+  }
+  .lb-champion-icon {
+    font-size: 20px;
+    letter-spacing: 1px;
+    flex: none;
+    line-height: 1;
+    display: inline-block;
+    animation: badgeToastPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s backwards;
+  }
   .lb-champion-text { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
   .lb-champion-text b { color: var(--text); }
   .lb-champion-tier { color: var(--gold); font-weight: 600; }
@@ -4650,11 +4703,16 @@
   //   alter table daily_leaders enable row level security;
   //   create policy "read daily_leaders" on daily_leaders for select using (true);
   //   create policy "insert daily_leaders" on daily_leaders for insert with check (true);
+  // Unlike the regular achievement badges (which run bronze→mythic because
+  // they track skill climbing from a low floor), being #1 on the daily
+  // leaderboard is already the top outcome — there's no "bronze" version of
+  // winning. So this track starts at Champion and escalates the crown
+  // itself (more crowns, hotter glow) rather than starting at a "weak" tier.
   const CHAMPION_TIERS = [
-    { min: 1,  icon: '🥉', name: 'Bronze Champion' },
-    { min: 3,  icon: '🥈', name: 'Silver Champion' },
-    { min: 7,  icon: '🥇', name: 'Gold Champion' },
-    { min: 15, icon: '👑', name: 'Legendary Champion' }
+    { min: 1,  icon: '👑',     name: 'Champion' },
+    { min: 3,  icon: '👑👑',   name: 'Champion Elite' },
+    { min: 7,  icon: '👑👑👑', name: 'Champion Legend' },
+    { min: 15, icon: '👑✨',   name: 'Eternal Champion' }
   ];
   function championTierFor(count) {
     let tier = null;
@@ -4718,6 +4776,13 @@
     return { username: leader.username, count, tier };
   }
 
+  const CHAMPION_TIER_CLASS = {
+    'Champion': 'tier-champion',
+    'Champion Elite': 'tier-elite',
+    'Champion Legend': 'tier-legend',
+    'Eternal Champion': 'tier-eternal'
+  };
+
   async function renderDailyLeaderboard() {
     const body = document.getElementById('lbBody');
     const dateLabel = document.getElementById('lbDateLabel');
@@ -4734,6 +4799,11 @@
     // from showing.
     const champion = await fetchYesterdaysChampion().catch(() => null);
     if (champion && championBanner) {
+      championBanner.className = 'lb-champion-banner';
+      // Reset then re-add the entrance-animation classes so the pop/glow
+      // replays every time the leaderboard is reopened, not just once.
+      void championBanner.offsetWidth;
+      championBanner.classList.add(CHAMPION_TIER_CLASS[champion.tier.name] || '');
       championBanner.style.display = 'flex';
       championBanner.innerHTML = `
         <span class="lb-champion-icon">${champion.tier.icon}</span>
@@ -4761,7 +4831,7 @@
       html += `
         <div class="lb-row rank-${rank}${isMe ? ' me' : ''}">
           <span class="lb-rank">${rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
-          <span class="lb-name">${isChampion ? `${champion.tier.icon} ` : ''}${r.username}</span>
+          <span class="lb-name">${isChampion ? `<span class="lb-champion-tag">${champion.tier.icon}</span> ` : ''}${r.username}</span>
           <span class="lb-stats">${formatLbTime(r.time_seconds)} · ${r.moves} moves</span>
           <span class="lb-clean">${r.clean ? '✨' : ''}</span>
         </div>`;
