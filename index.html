@@ -1697,7 +1697,7 @@
 <div class="overlay" id="loseOverlay">
   <div class="modal">
     <div class="icon" id="loseIcon">⏱️</div>
-    <h3>Time's up</h3>
+    <h3 id="loseTitle">Time's up</h3>
     <p id="loseStats">Moves: 0 · Ran out of time at 00:00</p>
     <div class="modal-actions">
       <button class="secondary" id="btnLoseClose">Close</button>
@@ -1940,7 +1940,7 @@
         '--gold': '#E8C547', '--amber': '#F5A623',
         '--text': '#E7ECF3', '--text-muted': '#8A93A6', '--text-faint': '#545D70'
       },
-      canvas: { mazeBg: '#1B2130', wall: '#3A445C', border: '#4A5674', trailRgb: '255,140,0', torchRgb: '245,166,35', finishEmoji: '🔥' }
+      canvas: { mazeBg: '#1B2130', wall: '#3A445C', border: '#4A5674', trailRgb: '255,140,0', torchRgb: '245,166,35', finishEmoji: '🔥', fallEmoji: '🕳️', fallLabel: 'Swallowed by the dark' }
     },
     {
       id: 'sunset_dunes', name: 'Sunset Dunes', emoji: '🏜️', unlockLevel: null,
@@ -1951,7 +1951,7 @@
         '--gold': '#FFD166', '--amber': '#FF8C42',
         '--text': '#FBEFE6', '--text-muted': '#C99A82', '--text-faint': '#8A6350'
       },
-      canvas: { mazeBg: '#3A2018', wall: '#6B3D2A', border: '#8A4E36', trailRgb: '224,36,94', torchRgb: '255,107,107', finishEmoji: '🌅' }
+      canvas: { mazeBg: '#3A2018', wall: '#6B3D2A', border: '#8A4E36', trailRgb: '224,36,94', torchRgb: '255,107,107', finishEmoji: '🌅', fallEmoji: '🏜️', fallLabel: 'Swallowed by the sand' }
     },
     {
       id: 'neon_arcade', name: 'Neon Arcade', emoji: '🕹️', unlockLevel: null,
@@ -1962,7 +1962,7 @@
         '--gold': '#FFE94E', '--amber': '#FF9F1C',
         '--text': '#F2ECFF', '--text-muted': '#9C8FCB', '--text-faint': '#635792'
       },
-      canvas: { mazeBg: '#221A44', wall: '#5A3FA0', border: '#7A4FE0', trailRgb: '0,245,212', torchRgb: '255,46,136', finishEmoji: '🌀' }
+      canvas: { mazeBg: '#221A44', wall: '#5A3FA0', border: '#7A4FE0', trailRgb: '0,245,212', torchRgb: '255,46,136', finishEmoji: '🌀', fallEmoji: '📉', fallLabel: 'Signal lost — game over' }
     },
     {
       id: 'frostbite', name: 'Frostbite', emoji: '❄️', unlockLevel: null,
@@ -1973,7 +1973,7 @@
         '--gold': '#E8F1F8', '--amber': '#5CC8E8',
         '--text': '#EAF4FB', '--text-muted': '#9BC1D9', '--text-faint': '#5F86A0'
       },
-      canvas: { mazeBg: '#173049', wall: '#2E5478', border: '#3E6A94', trailRgb: '0,184,217', torchRgb: '92,200,232', finishEmoji: '❄️' }
+      canvas: { mazeBg: '#173049', wall: '#2E5478', border: '#3E6A94', trailRgb: '0,184,217', torchRgb: '92,200,232', finishEmoji: '❄️', fallEmoji: '🧊', fallLabel: 'Fell through the ice' }
     },
     {
       id: 'forest_glade', name: 'Forest Glade', emoji: '🌿', unlockLevel: null,
@@ -1984,7 +1984,7 @@
         '--gold': '#E3C567', '--amber': '#D89A3E',
         '--text': '#EAF5EC', '--text-muted': '#9BC2A6', '--text-faint': '#5E8A6C'
       },
-      canvas: { mazeBg: '#1E3226', wall: '#3D5F45', border: '#4F7A56', trailRgb: '230,126,34', torchRgb: '216,154,62', finishEmoji: '🌳' }
+      canvas: { mazeBg: '#1E3226', wall: '#3D5F45', border: '#4F7A56', trailRgb: '230,126,34', torchRgb: '216,154,62', finishEmoji: '🌳', fallEmoji: '🕸️', fallLabel: 'Sank into the roots' }
     },
     {
       id: 'colorblind_safe', name: 'Clear Sight', emoji: '🔷', unlockLevel: null,
@@ -2001,7 +2001,7 @@
         '--gold': '#F0E442', '--amber': '#D55E00',
         '--text': '#F5F7FA', '--text-muted': '#9FB0C3', '--text-faint': '#66798F'
       },
-      canvas: { mazeBg: '#1C2636', wall: '#5C6B7A', border: '#8A9BAA', trailRgb: '86,180,233', torchRgb: '230,159,0', finishEmoji: '🏁' }
+      canvas: { mazeBg: '#1C2636', wall: '#5C6B7A', border: '#8A9BAA', trailRgb: '86,180,233', torchRgb: '230,159,0', finishEmoji: '🏁', fallEmoji: '🕳️', fallLabel: 'Dropped into the dark' }
     },
     {
       id: 'molten_core', name: 'Molten Core', emoji: '🌋', unlockLevel: 10,
@@ -2012,7 +2012,7 @@
         '--gold': '#FFD54F', '--amber': '#FF6E40',
         '--text': '#FDEDE8', '--text-muted': '#D18A72', '--text-faint': '#8F4D3A'
       },
-      canvas: { mazeBg: '#3B1712', wall: '#6B2A1C', border: '#8A3620', trailRgb: '255,87,34', torchRgb: '255,109,64', finishEmoji: '🌋' }
+      canvas: { mazeBg: '#3B1712', wall: '#6B2A1C', border: '#8A3620', trailRgb: '255,87,34', torchRgb: '255,109,64', finishEmoji: '🌋', fallEmoji: '🔥', fallLabel: 'Sank into the magma' }
     },
     {
       id: 'crystal_cavern', name: 'Crystal Cavern', emoji: '💎', unlockLevel: 25,
@@ -2023,7 +2023,7 @@
         '--gold': '#9FE7FF', '--amber': '#7BE0D6',
         '--text': '#EDEFFF', '--text-muted': '#9AA0D9', '--text-faint': '#5C63A0'
       },
-      canvas: { mazeBg: '#1F234F', wall: '#3B428C', border: '#4F58B0', trailRgb: '108,124,255', torchRgb: '159,231,255', finishEmoji: '💎' }
+      canvas: { mazeBg: '#1F234F', wall: '#3B428C', border: '#4F58B0', trailRgb: '108,124,255', torchRgb: '159,231,255', finishEmoji: '💎', fallEmoji: '💠', fallLabel: 'The crystal gave way' }
     },
     {
       id: 'void_rift', name: 'Void Rift', emoji: '🌌', unlockLevel: 50,
@@ -2034,7 +2034,7 @@
         '--gold': '#FDE68A', '--amber': '#C084FC',
         '--text': '#EDE9FE', '--text-muted': '#A78BDA', '--text-faint': '#6B5A99'
       },
-      canvas: { mazeBg: '#191330', wall: '#3B2A66', border: '#523B8A', trailRgb: '168,85,247', torchRgb: '244,114,182', finishEmoji: '🌌' }
+      canvas: { mazeBg: '#191330', wall: '#3B2A66', border: '#523B8A', trailRgb: '168,85,247', torchRgb: '244,114,182', finishEmoji: '🌌', fallEmoji: '🌀', fallLabel: 'Pulled into the rift' }
     },
     {
       id: 'golden_sanctum', name: 'Golden Sanctum', emoji: '✨', unlockLevel: 100,
@@ -2045,7 +2045,7 @@
         '--gold': '#FFF3C4', '--amber': '#FFC94A',
         '--text': '#FFF8E7', '--text-muted': '#D9C48A', '--text-faint': '#8F7B45'
       },
-      canvas: { mazeBg: '#3B2E15', wall: '#6B5424', border: '#8A6E2E', trailRgb: '255,215,0', torchRgb: '255,201,74', finishEmoji: '✨' }
+      canvas: { mazeBg: '#3B2E15', wall: '#6B5424', border: '#8A6E2E', trailRgb: '255,215,0', torchRgb: '255,201,74', finishEmoji: '✨', fallEmoji: '🕳️', fallLabel: 'The floor gave way' }
     },
     {
       id: 'abyssal_reef', name: 'Abyssal Reef', emoji: '🪸', unlockLevel: 200,
@@ -2056,7 +2056,7 @@
         '--gold': '#B6FFE8', '--amber': '#37C9B0',
         '--text': '#E4FBF6', '--text-muted': '#7FC9BE', '--text-faint': '#468178'
       },
-      canvas: { mazeBg: '#103038', wall: '#1F5A63', border: '#2C7580', trailRgb: '45,226,196', torchRgb: '79,214,255', finishEmoji: '🪸' }
+      canvas: { mazeBg: '#103038', wall: '#1F5A63', border: '#2C7580', trailRgb: '45,226,196', torchRgb: '79,214,255', finishEmoji: '🪸', fallEmoji: '🫧', fallLabel: 'Swept into the deep' }
     },
     {
       id: 'astral_ascension', name: 'Astral Ascension', emoji: '🌠', unlockLevel: 300,
@@ -2067,7 +2067,7 @@
         '--gold': '#FDE68A', '--amber': '#FCA5F1',
         '--text': '#F5F3FF', '--text-muted': '#B7ADD9', '--text-faint': '#746A99'
       },
-      canvas: { mazeBg: '#242238', wall: '#4B4570', border: '#645C92', trailRgb: '196,181,253', torchRgb: '252,165,241', finishEmoji: '🌠' }
+      canvas: { mazeBg: '#242238', wall: '#4B4570', border: '#645C92', trailRgb: '196,181,253', torchRgb: '252,165,241', finishEmoji: '🌠', fallEmoji: '🌑', fallLabel: 'Drifted into the void' }
     }
   ];
   const DEFAULT_THEME = 'deep_delve';
@@ -2291,7 +2291,13 @@
     pauseUsed: false,
     fogOfWar: false,
     mmPulses: [],
-    mazeReady: false
+    mazeReady: false,
+    falling: false,
+    fallStart: 0,
+    fallParticles: [],
+    finishing: false,
+    finishStart: 0,
+    finishParticles: []
   };
 
   let customImg = null;
@@ -2341,6 +2347,8 @@
   const winCelebrate = document.getElementById('winCelebrate');
   const btnWinNextLevel = document.getElementById('btnWinNextLevel');
   const loseOverlay = document.getElementById('loseOverlay');
+  const loseIcon = document.getElementById('loseIcon');
+  const loseTitle = document.getElementById('loseTitle');
   const loseStats = document.getElementById('loseStats');
   const timeLimitNote = document.getElementById('timeLimitNote');
   const shareOverlay = document.getElementById('shareOverlay');
@@ -2358,6 +2366,7 @@
   const btnConfirmCancel = document.getElementById('btnConfirmCancel');
   const deadEndToast = document.getElementById('deadEndToast');
   let deadEndTimer = null;
+  let fallTimer = null;
   const backBlockedToast = document.getElementById('backBlockedToast');
   let backBlockedTimer = null;
   const badgeUnlockToast = document.getElementById('badgeUnlockToast');
@@ -2611,7 +2620,14 @@
     state.unwindsUsed = 0;
     state.paused = false;
     state.pauseUsed = false;
+    state.falling = false;
+    state.fallStart = 0;
+    state.fallParticles = [];
+    state.finishing = false;
+    state.finishStart = 0;
+    state.finishParticles = [];
     clearTimeout(peekTimer);
+    clearTimeout(fallTimer);
     stopTimer();
     statTime.classList.remove('time-warning', 'time-danger');
     updateStats();
@@ -2685,11 +2701,13 @@
   // modes — a mode only "has" a limit if TIME_LIMITS lists it, so nothing
   // changes for modes without one.
   function handleTimeUp() {
-    if (state.won || state.lost) return;
+    if (state.won || state.lost || state.falling || state.finishing) return;
     state.lost = true;
     stopTimer();
     statTime.classList.remove('time-warning');
     statTime.classList.add('time-danger');
+    loseIcon.textContent = '⏱️';
+    loseTitle.textContent = "Time's up";
     loseStats.textContent = `Moves: ${state.moves} · Ran out of time at ${formatTime(state.timeLimit)}`;
     loseOverlay.classList.add('show');
     syncUnwindButton();
@@ -2777,10 +2795,36 @@
     playTone(783.99, 0.28, 'sine', 0.2, 0.24);    // G5
   }
 
+  function playArrivalChime() {
+    // A single bright ping the instant the exit is reached — the full
+    // three-note win chime still plays separately once the overlay shows.
+    playTone(880, 0.22, 'sine', 0.14, 0);
+  }
+
   function playDeadEndSound() {
     // A low, short descending tone — distinct from the win chime.
     playTone(196, 0.35, 'sawtooth', 0.12, 0);     // G3
     playTone(146.83, 0.4, 'sawtooth', 0.1, 0.08); // D3
+  }
+
+  function playFallSound() {
+    // A falling whoosh — a tone that bends sharply downward, distinct from
+    // the flat dead-end drone and the ascending win chime.
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(420, t0);
+    osc.frequency.exponentialRampToValueAtTime(60, t0 + 0.85);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(0.16, t0 + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.95);
   }
 
   function playBackBlockedSound() {
@@ -2984,7 +3028,7 @@
 
   // ---------- Movement ----------
   function tryMove(dirKey) {
-    if (state.won || state.lost || state.paused) return;
+    if (state.won || state.lost || state.paused || state.falling || state.finishing) return;
     const { x, y } = state.player;
     const idx = y * state.cols + x;
     const cell = state.cells[idx];
@@ -3023,10 +3067,20 @@
     scheduleAutoSaveMaze();
 
     const isExit = state.player.x === state.cols - 1 && state.player.y === state.rows - 1;
-    if (isExit) { handleWin(); return; }
+    if (isExit) { startFinishSequence(); return; }
 
     const newCell = state.cells[state.player.y * state.cols + state.player.x];
-    if (openCount(newCell) === 1) { flagDeadEnd(); }
+    if (openCount(newCell) === 1) {
+      // A dead end with unwinds still in the bank is recoverable — just a
+      // warning toast. A dead end with none left is final: there's no legal
+      // move out of it (retracing is blocked, and Unwind is spent), so the
+      // run is over and the character falls.
+      if (state.unwindsUsed >= state.unwindLimit) {
+        handleFall();
+      } else {
+        flagDeadEnd();
+      }
+    }
   }
 
   // ---------- Swipe gestures (mobile) ----------
@@ -3067,6 +3121,45 @@
     }, { passive: true });
 
     el.addEventListener('touchcancel', () => { tracking = false; }, { passive: true });
+  }
+
+  // ---------- Finish sequence ----------
+  // Reaching the exit doesn't pop the win overlay instantly — the character
+  // gets a brief themed flourish (a leap into the torch with a radiant
+  // burst) on the canvas itself first, then handleWin() runs as before.
+  const FINISH_ANIM_DURATION = 650;
+  let finishTimer = null;
+  function seedFinishParticles() {
+    const theme = currentTheme().canvas;
+    const ex = (state.cols - 1) * cellSize + cellSize / 2;
+    const ey = (state.rows - 1) * cellSize + cellSize / 2;
+    const colors = [`rgb(${theme.torchRgb})`, `rgb(${theme.trailRgb})`];
+    state.finishParticles = Array.from({ length: 22 }, () => {
+      const ang = Math.random() * Math.PI * 2;
+      const speed = cellSize * (0.05 + Math.random() * 0.07);
+      return {
+        x: ex, y: ey,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        size: cellSize * (0.05 + Math.random() * 0.08),
+        rot: Math.random() * Math.PI * 2,
+        vrot: (Math.random() - 0.5) * 0.3,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      };
+    });
+  }
+  function startFinishSequence() {
+    if (state.won || state.lost || state.finishing) return;
+    state.finishing = true;
+    state.finishStart = performance.now();
+    seedFinishParticles();
+    playArrivalChime();
+    if (navigator.vibrate) navigator.vibrate(60);
+    clearTimeout(finishTimer);
+    finishTimer = setTimeout(() => {
+      state.finishing = false;
+      handleWin();
+    }, FINISH_ANIM_DURATION);
   }
 
   async function handleWin() {
@@ -3333,6 +3426,62 @@
     deadEndTimer = setTimeout(() => deadEndToast.classList.remove('show'), 1600);
   }
 
+  // ---------- Fall (unrecoverable dead end) ----------
+  // Triggered the moment a dead end is reached with zero Unwinds left — at
+  // that point there's no legal move out (retracing is blocked, Unwind is
+  // spent), so the run is over. Rather than just soft-locking the player in
+  // place, the character visibly falls into the maze, themed to match
+  // whatever theme is active, and the run ends via the lose overlay.
+  const FALL_DURATION = 950;
+  function seedFallParticles() {
+    const theme = currentTheme().canvas;
+    const cx = state.player.x * cellSize + cellSize / 2;
+    const cy = state.player.y * cellSize + cellSize / 2;
+    const colors = [theme.wall, theme.border, `rgb(${theme.torchRgb})`];
+    state.fallParticles = Array.from({ length: 14 }, () => {
+      const ang = Math.random() * Math.PI * 2;
+      const speed = cellSize * (0.02 + Math.random() * 0.05);
+      return {
+        x: cx + Math.cos(ang) * cellSize * 0.15,
+        y: cy + Math.sin(ang) * cellSize * 0.15,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed - cellSize * 0.03,
+        size: cellSize * (0.07 + Math.random() * 0.09),
+        rot: Math.random() * Math.PI * 2,
+        vrot: (Math.random() - 0.5) * 0.3,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      };
+    });
+  }
+  function handleFall() {
+    if (state.won || state.lost || state.falling) return;
+    state.everLost = true;
+    state.falling = true;
+    state.fallStart = performance.now();
+    clearTimeout(deadEndTimer);
+    if (deadEndToast) deadEndToast.classList.remove('show');
+    seedFallParticles();
+    playFallSound();
+    if (navigator.vibrate) navigator.vibrate([70, 40, 160]);
+    stopTimer();
+    syncUnwindButton();
+    syncPeekButton();
+    clearTimeout(fallTimer);
+    fallTimer = setTimeout(finishFall, FALL_DURATION);
+  }
+  function finishFall() {
+    state.falling = false;
+    state.lost = true;
+    const theme = currentTheme();
+    loseIcon.textContent = theme.canvas.fallEmoji || '🕳️';
+    loseTitle.textContent = theme.canvas.fallLabel || 'You fell';
+    loseStats.textContent = `Moves: ${state.moves} · No unwinds left to escape the dead end`;
+    loseOverlay.classList.add('show');
+    syncUnwindButton();
+    syncPauseButton();
+    draw();
+  }
+
   // ---------- Peek ----------
   // Every maze here is a perfect maze (the DFS carve leaves a spanning tree),
   // so there's exactly one route between the player's current cell and the
@@ -3376,7 +3525,7 @@
   }
 
   function usePeek() {
-    if (state.peeksUsed >= state.peekLimit || state.won || state.lost || state.paused || !state.cells.length) return;
+    if (state.peeksUsed >= state.peekLimit || state.won || state.lost || state.paused || state.falling || state.finishing || !state.cells.length) return;
     const full = pathToExit(state.cols, state.rows, state.cells, state.player);
     if (!full) return;
     state.peeksUsed += 1;
@@ -3404,7 +3553,7 @@
   // marks the run as not "clean" for Flawless-style badges even after
   // unwinding out of it.
   function doUnwind() {
-    if (state.won || state.lost || state.paused || !state.cells.length) return;
+    if (state.won || state.lost || state.paused || state.falling || state.finishing || !state.cells.length) return;
     if (state.unwindsUsed >= state.unwindLimit) return;
     if (state.pathLog.length <= 1) return;
 
@@ -3424,7 +3573,7 @@
   function syncUnwindButton() {
     if (!btnUnwind) return;
     const remaining = Math.max(0, state.unwindLimit - state.unwindsUsed);
-    const canUse = remaining > 0 && state.pathLog.length > 1 && !state.won && !state.lost && !state.paused;
+    const canUse = remaining > 0 && state.pathLog.length > 1 && !state.won && !state.lost && !state.paused && !state.falling && !state.finishing;
     btnUnwind.disabled = !canUse;
     btnUnwind.textContent = `🔙 Unwind (${remaining} left)`;
   }
@@ -3653,6 +3802,21 @@
   function draw() {
     const w = canvas.width, h = canvas.height;
     const themeCanvas = currentTheme().canvas;
+
+    // A brief camera shake at the very start of a fall — decays over the
+    // first third of the animation, nothing outside that window.
+    let shakeX = 0, shakeY = 0;
+    if (state.falling) {
+      const ft = Math.min(1, (performance.now() - state.fallStart) / FALL_DURATION);
+      if (ft < 0.3) {
+        const mag = (1 - ft / 0.3) * cellSize * 0.05;
+        shakeX = (Math.random() - 0.5) * mag * 2;
+        shakeY = (Math.random() - 0.5) * mag * 2;
+      }
+    }
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
     ctx.clearRect(0, 0, w, h);
 
     ctx.fillStyle = themeCanvas.mazeBg;
@@ -3731,53 +3895,214 @@
     const chr = currentCharacter();
     const pxc = state.player.x * cellSize + cellSize / 2;
     const pyc = state.player.y * cellSize + cellSize / 2;
-    const playerGlow = ctx.createRadialGradient(pxc, pyc, 0, pxc, pyc, cellSize * 0.9);
-    playerGlow.addColorStop(0, `rgba(${themeCanvas.trailRgb}, 0.55)`);
-    playerGlow.addColorStop(1, `rgba(${themeCanvas.trailRgb}, 0)`);
-    ctx.fillStyle = playerGlow;
-    ctx.fillRect(pxc - cellSize * 0.9, pyc - cellSize * 0.9, cellSize * 1.8, cellSize * 1.8);
 
-    // Squash-and-stretch on the character glyph only — a short, decaying
-    // bounce kicked off by charBounceStart (set in tryMove on every real
-    // step) rather than a plain teleport from cell to cell. Scoped to just
-    // this glyph via save/translate/scale/restore so nothing else on the
-    // canvas (walls, glow, trail) is affected.
-    const bounceElapsed = charBounceStart ? (performance.now() - charBounceStart) : Infinity;
-    const bounceDur = 220;
-    ctx.save();
-    if (bounceElapsed < bounceDur) {
-      const t = bounceElapsed / bounceDur;
-      // Decaying oscillation: overshoot wide-then-tall, settle back to 1.
-      const wobble = Math.sin(t * Math.PI * 2.2) * (1 - t);
-      const sx = 1 + wobble * 0.16;
-      const sy = 1 - wobble * 0.16;
-      ctx.translate(pxc, pyc);
-      ctx.scale(sx, sy);
-      ctx.translate(-pxc, -pyc);
-    }
-
-    if (chr.id === 'custom' && customImgLoaded && customImg) {
-      const r = cellSize * 0.42;
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(pxc, pyc, r, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(customImg, pxc - r, pyc - r, r * 2, r * 2);
-      ctx.restore();
-    } else if (chr.id === 'custom') {
-      ctx.font = `${Math.floor(cellSize * 0.55)}px serif`;
-      ctx.fillText('❔', pxc, pyc);
+    if (state.falling) {
+      const t = Math.min(1, (performance.now() - state.fallStart) / FALL_DURATION);
+      drawFallEffect(t);
+    } else if (state.finishing) {
+      const t = Math.min(1, (performance.now() - state.finishStart) / FINISH_ANIM_DURATION);
+      drawFinishEffect(t);
     } else {
-      ctx.font = `${Math.floor(cellSize * 0.62)}px serif`;
-      ctx.fillText(chr.emoji, pxc, pyc);
+      const playerGlow = ctx.createRadialGradient(pxc, pyc, 0, pxc, pyc, cellSize * 0.9);
+      playerGlow.addColorStop(0, `rgba(${themeCanvas.trailRgb}, 0.55)`);
+      playerGlow.addColorStop(1, `rgba(${themeCanvas.trailRgb}, 0)`);
+      ctx.fillStyle = playerGlow;
+      ctx.fillRect(pxc - cellSize * 0.9, pyc - cellSize * 0.9, cellSize * 1.8, cellSize * 1.8);
+
+      // Squash-and-stretch on the character glyph only — a short, decaying
+      // bounce kicked off by charBounceStart (set in tryMove on every real
+      // step) rather than a plain teleport from cell to cell. Scoped to just
+      // this glyph via save/translate/scale/restore so nothing else on the
+      // canvas (walls, glow, trail) is affected.
+      const bounceElapsed = charBounceStart ? (performance.now() - charBounceStart) : Infinity;
+      const bounceDur = 220;
+      ctx.save();
+      if (bounceElapsed < bounceDur) {
+        const t = bounceElapsed / bounceDur;
+        // Decaying oscillation: overshoot wide-then-tall, settle back to 1.
+        const wobble = Math.sin(t * Math.PI * 2.2) * (1 - t);
+        const sx = 1 + wobble * 0.16;
+        const sy = 1 - wobble * 0.16;
+        ctx.translate(pxc, pyc);
+        ctx.scale(sx, sy);
+        ctx.translate(-pxc, -pyc);
+      }
+
+      if (chr.id === 'custom' && customImgLoaded && customImg) {
+        const r = cellSize * 0.42;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pxc, pyc, r, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(customImg, pxc - r, pyc - r, r * 2, r * 2);
+        ctx.restore();
+      } else if (chr.id === 'custom') {
+        ctx.font = `${Math.floor(cellSize * 0.55)}px serif`;
+        ctx.fillText('❔', pxc, pyc);
+      } else {
+        ctx.font = `${Math.floor(cellSize * 0.62)}px serif`;
+        ctx.fillText(chr.emoji, pxc, pyc);
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     drawFog();
 
     pulseT += 0.06;
+    ctx.restore();
     drawMiniMap();
+  }
+
+  // Falling-into-the-maze animation: a dark hole grows under the character,
+  // themed debris gets pulled in, and the whole canvas dims — the visual
+  // payoff for handleFall() (an unrecoverable dead end).
+  function drawFallEffect(t) {
+    const theme = currentTheme().canvas;
+    const cx = state.player.x * cellSize + cellSize / 2;
+    const cy = state.player.y * cellSize + cellSize / 2;
+
+    ctx.save();
+    ctx.fillStyle = `rgba(0,0,0,${0.5 * t})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    const holeR = Math.max(1, cellSize * 1.5 * Math.min(1, t * 1.5));
+    ctx.save();
+    const holeGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, holeR);
+    holeGrad.addColorStop(0, 'rgba(2,2,4,0.97)');
+    holeGrad.addColorStop(0.75, 'rgba(2,2,4,0.85)');
+    holeGrad.addColorStop(1, `rgba(${theme.torchRgb},0)`);
+    ctx.fillStyle = holeGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, holeR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${theme.torchRgb}, ${0.55 * (1 - t)})`;
+    ctx.lineWidth = Math.max(1.5, cellSize * 0.06);
+    ctx.stroke();
+    ctx.restore();
+
+    // Debris gets pulled toward the hole rather than exploding outward.
+    ctx.save();
+    state.fallParticles.forEach(p => {
+      p.x += (cx - p.x) * 0.05 + p.vx * (1 - t);
+      p.y += (cy - p.y) * 0.02 + p.vy * (1 - t) + cellSize * 0.008;
+      p.rot += p.vrot;
+      const alpha = Math.max(0, 1 - t * 1.15);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      ctx.restore();
+    });
+    ctx.restore();
+
+    // The character glyph itself sinks, spins, and shrinks into the hole.
+    const chr = currentCharacter();
+    const scale = Math.max(0, 1 - t * 1.1);
+    const dropY = cy + t * t * cellSize * 1.3;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - t * 1.2);
+    ctx.translate(cx, dropY);
+    ctx.rotate(t * Math.PI * 1.6);
+    ctx.scale(scale, scale);
+    ctx.font = `${Math.floor(cellSize * 0.62)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (chr.id === 'custom' && customImgLoaded && customImg) {
+      const r = cellSize * 0.42;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(customImg, -r, -r, r * 2, r * 2);
+      ctx.restore();
+    } else if (chr.id === 'custom') {
+      ctx.fillText('❔', 0, 0);
+    } else {
+      ctx.fillText(chr.emoji, 0, 0);
+    }
+    ctx.restore();
+  }
+
+  // Finish-line flourish: expanding themed rings and a radiant burst at the
+  // torch, sparkle debris, and the character leaping/spinning into it —
+  // the visual payoff for startFinishSequence() before the win overlay.
+  function drawFinishEffect(t) {
+    const theme = currentTheme().canvas;
+    const ex = (state.cols - 1) * cellSize + cellSize / 2;
+    const ey = (state.rows - 1) * cellSize + cellSize / 2;
+
+    for (let i = 0; i < 3; i++) {
+      const ringT = Math.min(1, Math.max(0, t * 1.5 - i * 0.2));
+      if (ringT <= 0) continue;
+      const r = cellSize * 0.3 + ringT * cellSize * 1.9;
+      ctx.save();
+      ctx.globalAlpha = (1 - ringT) * 0.7;
+      ctx.strokeStyle = `rgb(${theme.torchRgb})`;
+      ctx.lineWidth = Math.max(1.5, cellSize * 0.06);
+      ctx.beginPath();
+      ctx.arc(ex, ey, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const glowR = cellSize * (1 + t * 1.3);
+    ctx.save();
+    const burstGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, glowR);
+    burstGrad.addColorStop(0, `rgba(${theme.torchRgb}, ${0.85 * (1 - t * 0.4)})`);
+    burstGrad.addColorStop(1, `rgba(${theme.torchRgb},0)`);
+    ctx.fillStyle = burstGrad;
+    ctx.fillRect(ex - glowR, ey - glowR, glowR * 2, glowR * 2);
+    ctx.restore();
+
+    ctx.save();
+    state.finishParticles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += cellSize * 0.0006;
+      p.rot += p.vrot;
+      const alpha = Math.max(0, 1 - t * 1.05);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      ctx.restore();
+    });
+    ctx.restore();
+
+    const chr = currentCharacter();
+    const jumpProgress = Math.min(1, t / 0.6);
+    const scale = t < 0.6 ? 1 + Math.sin(jumpProgress * Math.PI) * 0.5 : Math.max(0, 1 - ((t - 0.6) / 0.4) * 1.2);
+    const liftY = ey - Math.sin(jumpProgress * Math.PI) * cellSize * 0.5;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - Math.max(0, t - 0.75) / 0.25);
+    ctx.translate(ex, liftY);
+    ctx.rotate(t * Math.PI * 1.2);
+    ctx.scale(scale, scale);
+    ctx.font = `${Math.floor(cellSize * 0.62)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (chr.id === 'custom' && customImgLoaded && customImg) {
+      const r = cellSize * 0.42;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(customImg, -r, -r, r * 2, r * 2);
+      ctx.restore();
+    } else if (chr.id === 'custom') {
+      ctx.fillText('❔', 0, 0);
+    } else {
+      ctx.fillText(chr.emoji, 0, 0);
+    }
+    ctx.restore();
   }
 
   // Fog of war: cells you're currently near stay fully lit, cells you've
