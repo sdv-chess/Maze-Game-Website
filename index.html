@@ -1870,12 +1870,12 @@
   // automatically, so the type of maze you're solving sets your own budget.
   function computeUnwindLimit(cols, rows) {
     const side = Math.max(cols, rows);
-    if (side <= 10) return 3;
-    if (side <= 18) return 5;
-    if (side <= 30) return 8;
-    if (side <= 60) return 12;
-    if (side <= 120) return 18;
-    return 25;
+    if (side <= 10) return 2;
+    if (side <= 18) return 3;
+    if (side <= 30) return 5;
+    if (side <= 60) return 7;
+    if (side <= 120) return 10;
+    return 14;
   }
 
   // Level mode: width and height grow together but at different, level-dependent
