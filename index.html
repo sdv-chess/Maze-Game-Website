@@ -922,6 +922,21 @@
   .lb-clean { flex: none; font-size: 12px; }
   .lb-empty { font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 18px 0; }
   .lb-own-rank { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 12px; color: var(--text-muted); text-align: center; }
+  .lb-champion-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, rgba(212,175,55,0.14), rgba(212,175,55,0.04));
+    border: 1px solid rgba(212,175,55,0.35);
+    border-radius: 10px;
+    padding: 9px 12px;
+    margin: -2px 0 12px;
+  }
+  .lb-champion-icon { font-size: 20px; flex: none; line-height: 1; }
+  .lb-champion-text { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+  .lb-champion-text b { color: var(--text); }
+  .lb-champion-tier { color: var(--gold); font-weight: 600; }
+  .lb-champion-count { color: var(--text-faint); font-size: 11px; }
 
   /* Insights */
   .modal.insights-modal { max-width: 540px; }
@@ -1561,6 +1576,7 @@
     <div class="icon">🏆</div>
     <h3>Daily leaderboard</h3>
     <p class="lb-date" id="lbDateLabel"></p>
+    <div class="lb-champion-banner" id="lbChampionBanner" style="display:none;"></div>
     <div id="lbBody">
       <p class="lb-empty">Loading…</p>
     </div>
@@ -2355,6 +2371,15 @@
     const day = String(d.getDate()).padStart(2, '0');
     return `${d.getFullYear()}-${m}-${day}`;
   }
+  // Same local-calendar-day logic as todayDateKey, offset by a number of
+  // days — used to look up yesterday's (now-final) daily leader.
+  function dateKeyOffset(daysAgo) {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
   function dailySeed(cols, rows) {
     return stringToSeed(`deep-delve-daily|${todayDateKey()}|${cols}x${rows}`);
   }
@@ -2551,6 +2576,12 @@
     resetProgress();
     state.cells = [];
     state.mazeReady = false;
+    // Also clear the "picked" size so a leftover selection from the last
+    // account (e.g. Daily) doesn't sit highlighted as if it were already
+    // chosen for the new session — nothing is actually generated yet, so
+    // nothing should look selected.
+    state.sizeKey = null;
+    syncSizeButtons();
     syncSetupNextButton();
   }
 
@@ -3017,6 +3048,18 @@
     const celebrateParts = [];
 
     if (state.currentUser) {
+      // Snapshot who this win actually belongs to. saveSolvedRecords /
+      // submitDailyScore / clearInProgressMaze below all await network
+      // calls, and during that gap the player can sign out and into a
+      // different account (very possible right after a quick Daily win).
+      // Everything past those awaits must keep acting on THIS account —
+      // never on whatever account happens to be signed in by the time the
+      // awaits resolve — or a fast account-switch can silently wipe the
+      // new account's in-progress maze (both locally and on the server)
+      // and push stale UI updates onto the wrong session.
+      const winningUser = state.currentUser;
+      const winningRecords = state.solvedRecords;
+      const winningSizeKey = state.sizeKey;
       const prevUnlocked = unlockedBadgeIds(state.solvedRecords);
       const prevThemesUnlocked = THEMES.filter(t => t.unlockLevel && allLevelsSolvedThrough(state.solvedRecords, t.unlockLevel)).map(t => t.id);
 
@@ -3046,18 +3089,26 @@
         record.path = state.pathLog.slice();
         record.best = { moves: state.moves, time: state.seconds };
       }
-      state.solvedRecords.push(record);
-      try { await saveSolvedRecords(state.currentUser, state.solvedRecords); } catch(e) {}
-      if (state.sizeKey === 'daily') {
-        try { await submitDailyScore(state.currentUser, record); } catch (e) {}
+      winningRecords.push(record);
+      try { await saveSolvedRecords(winningUser, winningRecords); } catch(e) {}
+      if (winningSizeKey === 'daily') {
+        try { await submitDailyScore(winningUser, record); } catch (e) {}
       }
+      // If the player signed out (or into a different account) while those
+      // awaits were in flight, everything below this point — clearing the
+      // in-progress maze, badge/theme unlock toasts, re-rendering account
+      // panels — belongs to the account that just won, not to whichever
+      // account is active now. Bail out rather than stomping the new
+      // session's state.
+      if (state.currentUser !== winningUser) return;
       clearTimeout(autoSaveMazeTimer);
       state.inProgressMaze = null;
-      try { await clearInProgressMaze(state.currentUser); } catch(e) {}
+      try { await clearInProgressMaze(winningUser); } catch(e) {}
+      if (state.currentUser !== winningUser) return;
       renderResumeMazeButton();
-      const newUnlocked = unlockedBadgeIds(state.solvedRecords);
+      const newUnlocked = unlockedBadgeIds(winningRecords);
       const justUnlocked = newUnlocked.filter(id => !prevUnlocked.includes(id));
-      const justUnlockedThemes = THEMES.filter(t => t.unlockLevel && !prevThemesUnlocked.includes(t.id) && allLevelsSolvedThrough(state.solvedRecords, t.unlockLevel));
+      const justUnlockedThemes = THEMES.filter(t => t.unlockLevel && !prevThemesUnlocked.includes(t.id) && allLevelsSolvedThrough(winningRecords, t.unlockLevel));
       // Real-time payoff — pop a toast for each newly-earned badge right now,
       // instead of only surfacing it later as a line in the win summary or
       // a quiet change in the Badges panel.
@@ -3087,10 +3138,10 @@
       }
 
       // Personal-best / streak celebration line, kept separate from badge/theme unlocks.
-      const categoryLabel = state.sizeKey === 'level' ? `Level ${state.level}` : (HISTORY_CATEGORY_LABELS[state.sizeKey] || 'this maze size');
+      const categoryLabel = winningSizeKey === 'level' ? `Level ${state.level}` : (HISTORY_CATEGORY_LABELS[winningSizeKey] || 'this maze size');
       if (priorBestTime !== null && state.seconds < priorBestTime) celebrateParts.push(`⏱️ New best time for ${categoryLabel}`);
       if (priorBestMoves !== null && state.moves < priorBestMoves) celebrateParts.push(`👣 New best moves for ${categoryLabel}`);
-      const streak = computeStreak(state.solvedRecords);
+      const streak = computeStreak(winningRecords);
       if (!hadSolveToday && streak.current >= 2) celebrateParts.push(`🔥 ${streak.current}-day streak`);
     }
 
@@ -4541,8 +4592,8 @@
     } catch (e) { /* best effort — a failed leaderboard write shouldn't block the win screen */ }
   }
 
-  async function fetchDailyLeaderboard(limit) {
-    const date = todayDateKey();
+  async function fetchDailyLeaderboard(limit, dateKey) {
+    const date = dateKey || todayDateKey();
     const { data, error } = await sb
       .from('daily_scores')
       .select('username, time_seconds, moves, clean')
@@ -4581,14 +4632,117 @@
     return `${m}:${s}`;
   }
 
+  // ---------- Champion badge (yesterday's leader, evolving with title count) ----------
+  // A day's leaderboard is only truly final once that day is over, so a
+  // "champion" is only ever crowned for a *past* date, never for today's
+  // still-in-progress standings. daily_leaders is a small append-only table:
+  // one locked-in row per date, written the first time anyone asks about
+  // that date after it's ended. Once a date has a row, it's never rewritten,
+  // so counting a user's rows there is a stable "times been #1" total.
+  //
+  // Expected table (create once in Supabase):
+  //   create table daily_leaders (
+  //     date date primary key,
+  //     username text not null,
+  //     time_seconds int not null,
+  //     moves int not null
+  //   );
+  //   alter table daily_leaders enable row level security;
+  //   create policy "read daily_leaders" on daily_leaders for select using (true);
+  //   create policy "insert daily_leaders" on daily_leaders for insert with check (true);
+  const CHAMPION_TIERS = [
+    { min: 1,  icon: '🥉', name: 'Bronze Champion' },
+    { min: 3,  icon: '🥈', name: 'Silver Champion' },
+    { min: 7,  icon: '🥇', name: 'Gold Champion' },
+    { min: 15, icon: '👑', name: 'Legendary Champion' }
+  ];
+  function championTierFor(count) {
+    let tier = null;
+    for (const t of CHAMPION_TIERS) { if (count >= t.min) tier = t; }
+    return tier;
+  }
+
+  // Locks in the winner for a past date the first time it's looked up, then
+  // just reads it back on every later call. Best-effort — if the table
+  // doesn't exist yet, or the write races with another client, this quietly
+  // does nothing rather than breaking the leaderboard.
+  async function ensureLeaderRecorded(dateKey) {
+    try {
+      const { data: existing } = await sb
+        .from('daily_leaders')
+        .select('username, time_seconds, moves')
+        .eq('date', dateKey)
+        .maybeSingle();
+      if (existing) return existing;
+
+      const top = await fetchDailyLeaderboard(1, dateKey);
+      if (!top.length) return null;
+      const winner = top[0];
+
+      await sb.from('daily_leaders').upsert({
+        date: dateKey,
+        username: winner.username,
+        time_seconds: winner.time_seconds,
+        moves: winner.moves
+      }, { onConflict: 'date', ignoreDuplicates: true });
+
+      const { data: locked } = await sb
+        .from('daily_leaders')
+        .select('username, time_seconds, moves')
+        .eq('date', dateKey)
+        .maybeSingle();
+      return locked || winner;
+    } catch (e) { return null; }
+  }
+
+  async function fetchChampionTitleCount(username) {
+    try {
+      const { count } = await sb
+        .from('daily_leaders')
+        .select('*', { count: 'exact', head: true })
+        .eq('username', username.toLowerCase());
+      return count || 0;
+    } catch (e) { return 0; }
+  }
+
+  // Resolves yesterday's champion and their evolving badge, or null if
+  // nobody finished yesterday's maze (or the daily_leaders table isn't
+  // set up yet).
+  async function fetchYesterdaysChampion() {
+    const yKey = dateKeyOffset(1);
+    const leader = await ensureLeaderRecorded(yKey);
+    if (!leader) return null;
+    const count = await fetchChampionTitleCount(leader.username);
+    const tier = championTierFor(count);
+    if (!tier) return null;
+    return { username: leader.username, count, tier };
+  }
+
   async function renderDailyLeaderboard() {
     const body = document.getElementById('lbBody');
     const dateLabel = document.getElementById('lbDateLabel');
+    const championBanner = document.getElementById('lbChampionBanner');
     dateLabel.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
     body.innerHTML = '<p class="lb-empty">Loading…</p>';
+    if (championBanner) championBanner.style.display = 'none';
 
     const TOP_N = 10;
     const rows = await fetchDailyLeaderboard(TOP_N);
+
+    // Yesterday's champion, if any — fetched alongside today's rows so a
+    // slow/missing daily_leaders table never blocks today's leaderboard
+    // from showing.
+    const champion = await fetchYesterdaysChampion().catch(() => null);
+    if (champion && championBanner) {
+      championBanner.style.display = 'flex';
+      championBanner.innerHTML = `
+        <span class="lb-champion-icon">${champion.tier.icon}</span>
+        <span class="lb-champion-text">
+          <b>${champion.username}</b> was yesterday's leader —
+          <span class="lb-champion-tier">${champion.tier.name}</span>
+          <span class="lb-champion-count">(${champion.count}× #1)</span>
+        </span>`;
+    }
 
     if (!rows.length) {
       body.innerHTML = '<p class="lb-empty">No one has finished today\'s maze yet — be the first!</p>';
@@ -4597,15 +4751,17 @@
 
     const meUsername = state.currentUser ? state.currentUser.toLowerCase() : null;
     const inTop = meUsername && rows.some(r => r.username === meUsername);
+    const championUsername = champion ? champion.username.toLowerCase() : null;
 
     let html = '<div class="lb-list">';
     rows.forEach((r, i) => {
       const rank = i + 1;
       const isMe = r.username === meUsername;
+      const isChampion = championUsername && r.username === championUsername;
       html += `
         <div class="lb-row rank-${rank}${isMe ? ' me' : ''}">
           <span class="lb-rank">${rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
-          <span class="lb-name">${r.username}</span>
+          <span class="lb-name">${isChampion ? `${champion.tier.icon} ` : ''}${r.username}</span>
           <span class="lb-stats">${formatLbTime(r.time_seconds)} · ${r.moves} moves</span>
           <span class="lb-clean">${r.clean ? '✨' : ''}</span>
         </div>`;
@@ -5516,10 +5672,20 @@
     if (name === 'signin') {
       renderAccountUI();
     } else if (name === 'setup') {
-      syncSizeButtons();
-      buildThemeSelect();
-      buildCharSelect();
-      syncSetupNextButton();
+      // syncSetupNextButton must run no matter what — wrapped so that if
+      // anything else in here throws (e.g. a theme/character rebuild
+      // hitting unexpected state right after an account switch), the
+      // "Enter the maze" button still gets its enabled/disabled state
+      // synced instead of being left stuck from whatever it was before.
+      try {
+        syncSizeButtons();
+        buildThemeSelect();
+        buildCharSelect();
+      } catch (err) {
+        console.error('Setup screen render error:', err);
+      } finally {
+        syncSetupNextButton();
+      }
     } else if (name === 'game') {
       resizeCanvas();
       draw();
