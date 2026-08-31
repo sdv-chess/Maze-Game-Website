@@ -1122,6 +1122,52 @@
     100% { opacity: 1; transform: scale(1); filter: blur(0); }
   }
 
+  /* Level transition — full-screen portal effect used to move between
+     Level-mode mazes automatically: a bright upward swirl on a win (teleport
+     to the next level), a dark downward swirl on a fall (dropped back a
+     level). The maze swap itself happens at the animation's midpoint, while
+     the screen is fully covered, so the change is invisible until the
+     portal clears. --warp-color is set from JS to match the active theme. */
+  .level-transition {
+    position: fixed; inset: 0; z-index: 200;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+    opacity: 0;
+  }
+  .level-transition-icon {
+    font-size: 60px;
+    filter: drop-shadow(0 0 18px var(--warp-color, var(--gold)));
+  }
+  .level-transition-label {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: 0.03em;
+    color: var(--text);
+    text-shadow: 0 0 14px var(--warp-color, var(--gold));
+  }
+  .level-transition.warp-up {
+    animation: levelWarpUp 1.1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    background: radial-gradient(circle, var(--warp-color, var(--gold)) 0%, rgba(0,0,0,0) 70%);
+  }
+  @keyframes levelWarpUp {
+    0%   { opacity: 0; transform: scale(0.05) rotate(0deg); }
+    45%  { opacity: 1; transform: scale(1.5) rotate(160deg); }
+    55%  { opacity: 1; transform: scale(1.5) rotate(180deg); }
+    100% { opacity: 0; transform: scale(3.2) rotate(300deg); }
+  }
+  .level-transition.warp-down {
+    animation: levelWarpDown 1.1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    background: radial-gradient(circle, #05070c 0%, var(--warp-color, var(--coral)) 55%, rgba(0,0,0,0) 78%);
+  }
+  @keyframes levelWarpDown {
+    0%   { opacity: 0; transform: scale(3.2) rotate(0deg); }
+    45%  { opacity: 1; transform: scale(1.3) rotate(-140deg); }
+    55%  { opacity: 1; transform: scale(1.3) rotate(-160deg); }
+    100% { opacity: 0; transform: scale(0.05) rotate(-300deg); }
+  }
+
   /* Wall bump — a quick, contained shake plus a soft red edge-flash so a
      blocked move reads as "no" without feeling like a punishment. */
   .maze-scroll.wall-bump { animation: wallBumpShake 0.28s ease; }
@@ -1705,6 +1751,11 @@
       <button class="primary" id="btnLoseNew">New maze</button>
     </div>
   </div>
+</div>
+
+<div class="level-transition" id="levelTransition">
+  <div class="level-transition-icon" id="levelTransitionIcon">✨</div>
+  <div class="level-transition-label" id="levelTransitionLabel">Level 2</div>
 </div>
 
 <div class="overlay" id="pauseOverlay">
@@ -2350,6 +2401,13 @@
   const loseIcon = document.getElementById('loseIcon');
   const loseTitle = document.getElementById('loseTitle');
   const loseStats = document.getElementById('loseStats');
+  const levelTransitionEl = document.getElementById('levelTransition');
+  const levelTransitionIcon = document.getElementById('levelTransitionIcon');
+  const levelTransitionLabel = document.getElementById('levelTransitionLabel');
+  let winAutoAdvanceTimer = null;
+  let loseAutoAdvanceTimer = null;
+  let levelTransitionMidTimer = null;
+  let levelTransitionEndTimer = null;
   const timeLimitNote = document.getElementById('timeLimitNote');
   const shareOverlay = document.getElementById('shareOverlay');
   const shareCanvas = document.getElementById('shareCanvas');
@@ -3162,6 +3220,52 @@
     }, FINISH_ANIM_DURATION);
   }
 
+  // ---------- Level mode: automatic transitions ----------
+  // In Level mode, winning or falling doesn't wait on a button press — the
+  // player is carried straight into the next (or previous) level behind a
+  // themed portal swirl. The maze swap happens at the animation's midpoint,
+  // while the screen is fully covered, so it's invisible to the player.
+  const LEVEL_WIN_AUTO_DELAY = 1400;   // ms to let the win overlay/confetti register before warping on
+  const LEVEL_LOSE_AUTO_DELAY = 1400;  // ms to let the fall/lose overlay register before dropping back
+  const LEVEL_TRANSITION_DURATION = 1100;
+  const LEVEL_TRANSITION_MIDPOINT = 550;
+
+  function playLevelTransition(direction, levelNum, onMidpoint) {
+    if (!levelTransitionEl) { onMidpoint(); return; }
+    const theme = currentTheme().canvas;
+    levelTransitionEl.style.setProperty('--warp-color', direction > 0 ? `rgb(${theme.torchRgb})` : `rgb(${theme.trailRgb})`);
+    if (levelTransitionIcon) levelTransitionIcon.textContent = direction > 0 ? (theme.finishEmoji || '✨') : (theme.fallEmoji || '🕳️');
+    if (levelTransitionLabel) levelTransitionLabel.textContent = direction > 0 ? `Level ${levelNum} ▶` : `◀ Level ${levelNum}`;
+    // Reset then re-add the animation class so replaying it (e.g. two falls
+    // in a row) restarts the keyframes instead of doing nothing.
+    levelTransitionEl.className = 'level-transition';
+    void levelTransitionEl.offsetWidth;
+    levelTransitionEl.className = 'level-transition ' + (direction > 0 ? 'warp-up' : 'warp-down');
+    clearTimeout(levelTransitionMidTimer);
+    levelTransitionMidTimer = setTimeout(onMidpoint, LEVEL_TRANSITION_MIDPOINT);
+    clearTimeout(levelTransitionEndTimer);
+    levelTransitionEndTimer = setTimeout(() => {
+      levelTransitionEl.className = 'level-transition';
+    }, LEVEL_TRANSITION_DURATION);
+  }
+
+  // direction > 0: teleport forward to the next level (win). direction < 0:
+  // fall back a level (loss) — clamped at Level 1, so falling there just
+  // regenerates Level 1 rather than going below it.
+  function goToLevelStep(direction) {
+    clearTimeout(winAutoAdvanceTimer);
+    clearTimeout(loseAutoAdvanceTimer);
+    if (direction > 0) { winOverlay.classList.remove('show'); clearConfetti(); }
+    else { loseOverlay.classList.remove('show'); }
+    const nextLevel = Math.max(1, state.level + direction);
+    playLevelTransition(direction, nextLevel, () => {
+      state.level = nextLevel;
+      const dims = levelDims(state.level);
+      applyNewMaze(dims.cols, dims.rows, 'level');
+      updateLevelPanel();
+    });
+  }
+
   async function handleWin() {
     state.won = true;
     syncUnwindButton();
@@ -3178,6 +3282,17 @@
     winOverlay.classList.add('show');
     popWinIcon();
     burstConfetti();
+
+    // Level mode carries the player straight into the next level — no
+    // button press needed. Cleared if the player dismisses the win overlay
+    // manually before the timer fires.
+    if (state.sizeKey === 'level') {
+      clearTimeout(winAutoAdvanceTimer);
+      winAutoAdvanceTimer = setTimeout(() => {
+        if (!winOverlay.classList.contains('show')) return;
+        goToLevelStep(1);
+      }, LEVEL_WIN_AUTO_DELAY);
+    }
 
     // Snapshot this run for the share card — available whether or not the player is signed in.
     state.lastWinRecord = {
@@ -3480,6 +3595,17 @@
     syncUnwindButton();
     syncPauseButton();
     draw();
+
+    // Level mode: falling drops the player back a level automatically —
+    // no button press needed. Cleared if the player dismisses the lose
+    // overlay manually before the timer fires.
+    if (state.sizeKey === 'level') {
+      clearTimeout(loseAutoAdvanceTimer);
+      loseAutoAdvanceTimer = setTimeout(() => {
+        if (!loseOverlay.classList.contains('show')) return;
+        goToLevelStep(-1);
+      }, LEVEL_LOSE_AUTO_DELAY);
+    }
   }
 
   // ---------- Peek ----------
@@ -5875,20 +6001,15 @@
     challengeBanner.style.display = 'none';
   });
 
-  document.getElementById('btnLoseClose').addEventListener('click', () => loseOverlay.classList.remove('show'));
-  document.getElementById('btnLoseRestart').addEventListener('click', () => { loseOverlay.classList.remove('show'); restartMaze(); });
-  document.getElementById('btnLoseNew').addEventListener('click', () => { loseOverlay.classList.remove('show'); newMazeCurrentSize(); });
+  // Any manual dismissal of the win/lose overlay cancels the pending
+  // automatic level transition, so a deliberate click never races with it.
+  document.getElementById('btnLoseClose').addEventListener('click', () => { clearTimeout(loseAutoAdvanceTimer); loseOverlay.classList.remove('show'); });
+  document.getElementById('btnLoseRestart').addEventListener('click', () => { clearTimeout(loseAutoAdvanceTimer); loseOverlay.classList.remove('show'); restartMaze(); });
+  document.getElementById('btnLoseNew').addEventListener('click', () => { clearTimeout(loseAutoAdvanceTimer); loseOverlay.classList.remove('show'); newMazeCurrentSize(); });
 
-  document.getElementById('btnWinClose').addEventListener('click', () => { winOverlay.classList.remove('show'); clearConfetti(); });
-  document.getElementById('btnWinNew').addEventListener('click', () => { winOverlay.classList.remove('show'); clearConfetti(); newMazeCurrentSize(); });
-  btnWinNextLevel.addEventListener('click', () => {
-    winOverlay.classList.remove('show');
-    clearConfetti();
-    state.level += 1;
-    const dims = levelDims(state.level);
-    applyNewMaze(dims.cols, dims.rows, 'level');
-    updateLevelPanel();
-  });
+  document.getElementById('btnWinClose').addEventListener('click', () => { clearTimeout(winAutoAdvanceTimer); winOverlay.classList.remove('show'); clearConfetti(); });
+  document.getElementById('btnWinNew').addEventListener('click', () => { clearTimeout(winAutoAdvanceTimer); winOverlay.classList.remove('show'); clearConfetti(); newMazeCurrentSize(); });
+  btnWinNextLevel.addEventListener('click', () => goToLevelStep(1));
 
   // ---------- UI wiring: share card ----------
   document.getElementById('btnWinShare').addEventListener('click', () => {
