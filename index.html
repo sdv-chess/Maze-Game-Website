@@ -692,6 +692,10 @@
   .dead-end-toast.show { opacity: 1; transform: translate(-50%, 0); }
   .dead-end-toast .icon { color: var(--coral); margin-right: 6px; }
   .dead-end-toast.back-blocked .icon { color: var(--amber); }
+  .dead-end-toast.gate-locked { border-color: rgba(232,197,71,0.5); }
+  .dead-end-toast.gate-locked .icon { color: var(--gold); }
+  .dead-end-toast.item-pickup { border-color: rgba(58,219,196,0.5); }
+  .dead-end-toast.item-pickup .icon { color: var(--teal); }
 
   /* Badge-unlock toast — slides down from the top the instant a badge
      unlocks, rather than making the player discover it later in the
@@ -1442,8 +1446,10 @@
           <button class="secondary" id="btnPause">⏸ Pause</button>
           <button class="secondary" id="btnToggleSound">🔊 Sound: On</button>
           <button class="secondary" id="btnFogToggle">🌫️ Fog of war: Off</button>
+          <button class="secondary" id="btnBraidToggle">🔀 Braided paths: Off</button>
+          <button class="secondary" id="btnItemsToggle">💎 Collectibles: Off</button>
         </div>
-        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it.</p>
+        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it. Braided paths open a few dead ends into loops for alternate routes. Collectibles sprinkle torches, unwind crystals, and the occasional locked gate into dead ends. Both apply to the next maze you generate.</p>
       </div>
 
       <div class="card">
@@ -1501,6 +1507,7 @@
             <section>
               <h4>Dead ends</h4>
               <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze.</p>
+              <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> sprinkle torches (a temporary bigger fog radius) and unwind crystals (+1 unwind) into dead ends as bonus loot — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
             </section>
           </div>
         </div>
@@ -1847,6 +1854,8 @@
 
 <div class="dead-end-toast" id="deadEndToast"><span class="icon">⚠️</span>Dead end — you can't turn back. Restart or start a new maze to try again.</div>
 <div class="dead-end-toast back-blocked" id="backBlockedToast"><span class="icon">↩️</span>You can't go back — keep moving forward from here.</div>
+<div class="dead-end-toast gate-locked" id="gateLockedToast"><span class="icon">🔒</span>Locked — find the key first.</div>
+<div class="dead-end-toast item-pickup" id="itemPickupToast"><span class="icon">✨</span><span id="itemPickupText"></span></div>
 <div class="badge-unlock-toast" id="badgeUnlockToast" role="status" aria-live="polite">
   <span class="but-icon" id="badgeUnlockToastIcon"></span>
   <span class="but-text">
@@ -1928,6 +1937,21 @@
     if (side <= 120) return 10;
     return 14;
   }
+
+  // ---------- Braid mazes & interactive items (optional difficulty extras) ----------
+  // A plain DFS carve is a "perfect" maze — a spanning tree with exactly one
+  // path between any two cells, so every dead end is a lone branch. Braiding
+  // knocks a percentage of dead-end walls down after the fact, turning some
+  // of those branches into loops so a stuck player has an alternate route
+  // instead of only Unwind. Both extras are opt-in (see btnBraidToggle /
+  // btnItemsToggle) so the classic single-path feel stays the default.
+  const BRAID_PERCENT = 8; // within the requested 5-10% band
+  const ITEM_DEADEND_CHANCE = 0.35; // fraction of eligible dead ends that get a torch/crystal
+  const TORCH_VISION_BOOST = 1.6;   // added to FOG_LIT_RADIUS while a torch is active
+  const TORCH_BOOST_DURATION = 9000; // ms
+
+  const BRAID_PREF_KEY = 'deepDelveBraid';
+  const ITEMS_PREF_KEY = 'deepDelveItems';
 
   // Level mode: width and height grow together but at different, level-dependent
   // rates, so levels aren't always square — some run wide, some run tall.
@@ -2341,6 +2365,14 @@
     paused: false,
     pauseUsed: false,
     fogOfWar: false,
+    braidEnabled: false,
+    itemsEnabled: false,
+    items: {},
+    itemsCollected: new Set(),
+    gates: [],
+    hasKey: false,
+    visionBoostUntil: 0,
+    baseUnwindLimit: 3,
     mmPulses: [],
     mazeReady: false,
     falling: false,
@@ -2427,6 +2459,11 @@
   let fallTimer = null;
   const backBlockedToast = document.getElementById('backBlockedToast');
   let backBlockedTimer = null;
+  const gateLockedToast = document.getElementById('gateLockedToast');
+  let gateLockedTimer = null;
+  const itemPickupToast = document.getElementById('itemPickupToast');
+  const itemPickupText = document.getElementById('itemPickupText');
+  let itemPickupTimer = null;
   const badgeUnlockToast = document.getElementById('badgeUnlockToast');
   const badgeUnlockToastIcon = document.getElementById('badgeUnlockToastIcon');
   const badgeUnlockToastName = document.getElementById('badgeUnlockToastName');
@@ -2551,6 +2588,253 @@
     return c;
   }
 
+  // Effective open count for cell (x,y): like openCount, but a passage that's
+  // sealed behind a locked gate (see state.gates) doesn't count as open until
+  // state.hasKey is true. Used for the dead-end check in tryMove so walking
+  // up to a locked gate with nothing left to unwind reads as the dead end it
+  // functionally is.
+  function openCountEffective(cell, x, y) {
+    let c = 0;
+    for (const dirKey of Object.keys(DIRS)) {
+      if (cell[dirKey]) continue;
+      if (isGateLocked(x, y, dirKey)) continue;
+      c++;
+    }
+    return c;
+  }
+
+  function isGateLocked(x, y, dirKey) {
+    if (state.hasKey || !state.gates || !state.gates.length) return false;
+    return state.gates.some(g =>
+      (g.ax === x && g.ay === y && g.adir === dirKey) ||
+      (g.bx === x && g.by === y && g.bdir === dirKey)
+    );
+  }
+
+  // Removes a percentage of dead-end walls after the DFS carve, turning the
+  // affected branches into loops ("braiding" the maze). Only ever opens a
+  // wall that's currently closed and leads to an in-bounds neighbor, so it
+  // can only add connectivity, never remove the guarantee that every cell is
+  // reachable from the start.
+  function braidMaze(cells, cols, rows, rand, percent) {
+    if (!percent) return;
+    const idx = (x, y) => y * cols + x;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (x === 0 && y === 0) continue;
+        if (x === cols - 1 && y === rows - 1) continue;
+        const cell = cells[idx(x, y)];
+        if (openCount(cell) !== 1) continue;
+        if (rand() * 100 >= percent) continue;
+        const closedDirs = Object.keys(DIRS).filter(dirKey => {
+          if (!cell[dirKey]) return false;
+          const d = DIRS[dirKey];
+          const nx = x + d.dx, ny = y + d.dy;
+          return nx >= 0 && nx < cols && ny >= 0 && ny < rows;
+        });
+        if (!closedDirs.length) continue;
+        const dirKey = closedDirs[Math.floor(rand() * closedDirs.length)];
+        const d = DIRS[dirKey];
+        const nx = x + d.dx, ny = y + d.dy;
+        cells[idx(x, y)][dirKey] = false;
+        cells[idx(nx, ny)][d.opp] = false;
+      }
+    }
+  }
+
+  // Temporarily closes edge (ax,ay)-adir-(bx,by) and checks whether start and
+  // goal are still connected without it — i.e. whether it's a bridge. Used to
+  // find a safe spot for a locked gate that can't just be walked around.
+  function isBridgeEdge(cells, cols, rows, ax, ay, adir, bx, by) {
+    const idx = (x, y) => y * cols + x;
+    const bdir = DIRS[adir].opp;
+    cells[idx(ax, ay)][adir] = true;
+    cells[idx(bx, by)][bdir] = true;
+    const n = cols * rows;
+    const visited = new Array(n).fill(false);
+    const goalIdx = idx(cols - 1, rows - 1);
+    const queue = [idx(0, 0)];
+    visited[idx(0, 0)] = true;
+    let qi = 0, reached = false;
+    while (qi < queue.length) {
+      const cur = queue[qi++];
+      if (cur === goalIdx) { reached = true; break; }
+      const cx = cur % cols, cy = Math.floor(cur / cols);
+      const c = cells[cur];
+      for (const dk of Object.keys(DIRS)) {
+        if (c[dk]) continue;
+        const d = DIRS[dk];
+        const nx = cx + d.dx, ny = cy + d.dy;
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+        const ni = idx(nx, ny);
+        if (!visited[ni]) { visited[ni] = true; queue.push(ni); }
+      }
+    }
+    cells[idx(ax, ay)][adir] = false;
+    cells[idx(bx, by)][bdir] = false;
+    return !reached;
+  }
+
+  // Looks for a legal Key & Gate setup: a gate placed on a genuine bridge
+  // edge in the back stretch of the start→goal path (so it can't be routed
+  // around, even through a braided loop), and a key sitting in some dead-end
+  // branch that forks off the path before that gate — so the only way to
+  // reach the exit is to detour for the key first. Returns null (skips the
+  // feature for this maze) if no such arrangement exists.
+  function findKeyGateSetup(cells, cols, rows, deadEnds, rand) {
+    const idx = (x, y) => y * cols + x;
+    const n = cols * rows;
+    const parent = new Array(n).fill(-1);
+    const visited = new Array(n).fill(false);
+    const goalIdx = idx(cols - 1, rows - 1);
+    const queue = [idx(0, 0)];
+    visited[idx(0, 0)] = true;
+    let qi = 0;
+    while (qi < queue.length) {
+      const cur = queue[qi++];
+      const cx = cur % cols, cy = Math.floor(cur / cols);
+      const c = cells[cur];
+      for (const dk of Object.keys(DIRS)) {
+        if (c[dk]) continue;
+        const d = DIRS[dk];
+        const nx = cx + d.dx, ny = cy + d.dy;
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+        const ni = idx(nx, ny);
+        if (!visited[ni]) { visited[ni] = true; parent[ni] = cur; queue.push(ni); }
+      }
+    }
+    if (!visited[goalIdx]) return null;
+
+    const mainPath = [];
+    let cur = goalIdx;
+    while (cur !== -1) { mainPath.push(cur); cur = parent[cur]; }
+    mainPath.reverse();
+    if (mainPath.length < 6) return null;
+    const pathPos = new Map();
+    mainPath.forEach((ci, i) => pathPos.set(ci, i));
+
+    const startSearch = Math.floor(mainPath.length * 0.55);
+    const endSearch = Math.max(startSearch + 1, mainPath.length - 2);
+    const candidates = [];
+    for (let i = endSearch; i >= startSearch; i--) candidates.push(i);
+
+    let gateInfo = null, gatePathIndex = -1;
+    for (const i of candidates.slice(0, 10)) {
+      const aIdx = mainPath[i - 1], bIdx = mainPath[i];
+      const ax = aIdx % cols, ay = Math.floor(aIdx / cols);
+      const bx = bIdx % cols, by = Math.floor(bIdx / cols);
+      let dirKey = null;
+      for (const dk of Object.keys(DIRS)) {
+        const d = DIRS[dk];
+        if (ax + d.dx === bx && ay + d.dy === by) { dirKey = dk; break; }
+      }
+      if (!dirKey) continue;
+      if (isBridgeEdge(cells, cols, rows, ax, ay, dirKey, bx, by)) {
+        gateInfo = { ax, ay, adir: dirKey, bx, by, bdir: DIRS[dirKey].opp };
+        gatePathIndex = i;
+        break;
+      }
+    }
+    if (!gateInfo) return null;
+
+    const shuffled = deadEnds.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    for (const dcell of shuffled) {
+      const di = idx(dcell.x, dcell.y);
+      if (pathPos.has(di)) continue;
+      let walker = di, guard = 0;
+      while (!pathPos.has(walker) && parent[walker] !== -1 && guard < n) { walker = parent[walker]; guard++; }
+      if (!pathPos.has(walker)) continue;
+      const branchIdx = pathPos.get(walker);
+      if (branchIdx < gatePathIndex - 1) {
+        return { keyDeadEnd: dcell, gateEdge: gateInfo };
+      }
+    }
+    return null;
+  }
+
+  // Populates state.items / state.gates for a freshly-generated maze. Runs
+  // after braiding, on the final wall layout, so a Key & Gate placement can
+  // never be bypassed by a loop the braid step opened. No-op (leaves an
+  // empty layout) whenever state.itemsEnabled is off.
+  // Walks backward from a dead-end tip along its (currently) single corridor,
+  // counting cells until it hits a junction (3+ openings) or the start —
+  // i.e. the first point that offers an alternate way forward. That count is
+  // exactly how many Unwinds it costs to retreat from the tip back to safety,
+  // since each Unwind steps back exactly one cell.
+  function branchDepth(cells, cols, rows, x, y) {
+    const idx = (cx, cy) => cy * cols + cx;
+    let cx = x, cy = y, prevx = -1, prevy = -1, depth = 0;
+    while (true) {
+      if (cx === 0 && cy === 0) break;
+      const cell = cells[idx(cx, cy)];
+      const openDirs = Object.keys(DIRS).filter(dk => !cell[dk]);
+      const forward = openDirs.filter(dk => {
+        const d = DIRS[dk];
+        return !((cx + d.dx === prevx) && (cy + d.dy === prevy));
+      });
+      if (forward.length !== 1) break; // junction (or, on the first step, the dead-end's only opening still counts)
+      const d = DIRS[forward[0]];
+      const nx = cx + d.dx, ny = cy + d.dy;
+      prevx = cx; prevy = cy; cx = nx; cy = ny;
+      depth++;
+    }
+    return Math.max(1, depth);
+  }
+
+  // Tops up the Unwind budget so the player has at least `cost` unwinds in
+  // hand — never takes any away. Called right when an item is collected so
+  // a detour into a dead end is always fully affordable to reverse, however
+  // deep the branch turned out to be.
+  function ensureEscapeBudget(cost) {
+    const remaining = state.unwindLimit - state.unwindsUsed;
+    if (remaining < cost) {
+      state.unwindLimit += (cost - remaining);
+      syncUnwindButton();
+    }
+  }
+
+  function decorateMaze(cells, cols, rows, rand) {
+    state.items = {};
+    state.gates = [];
+    state.hasKey = false;
+    state.itemsCollected = new Set();
+    if (!state.itemsEnabled) return;
+
+    const idx = (x, y) => y * cols + x;
+    const deadEnds = [];
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (x === 0 && y === 0) continue;
+        if (x === cols - 1 && y === rows - 1) continue;
+        if (openCount(cells[idx(x, y)]) === 1) deadEnds.push({ x, y });
+      }
+    }
+    if (!deadEnds.length) return;
+
+    if (deadEnds.length >= 2) {
+      const setup = findKeyGateSetup(cells, cols, rows, deadEnds, rand);
+      if (setup) {
+        state.gates.push(setup.gateEdge);
+        const d = setup.keyDeadEnd;
+        state.items[`${d.x},${d.y}`] = { type: 'key', escapeCost: branchDepth(cells, cols, rows, d.x, d.y) };
+      }
+    }
+
+    const itemTypes = ['torch', 'crystal'];
+    deadEnds.forEach(d => {
+      const key = `${d.x},${d.y}`;
+      if (state.items[key]) return; // key already placed here
+      if (rand() < ITEM_DEADEND_CHANCE) {
+        const type = itemTypes[Math.floor(rand() * itemTypes.length)];
+        state.items[key] = { type, escapeCost: branchDepth(cells, cols, rows, d.x, d.y) };
+      }
+    });
+  }
+
   // ---------- New game / restart / load ----------
   function applyNewMaze(cols, rows, sizeKey) {
     state.sizeKey = sizeKey;
@@ -2561,6 +2845,9 @@
     // every player who opens the game today gets an identical layout.
     const rng = sizeKey === 'daily' ? mulberry32(dailySeed(cols, rows)) : undefined;
     state.cells = generateMaze(cols, rows, rng);
+    const rand = rng || Math.random;
+    braidMaze(state.cells, cols, rows, rand, state.braidEnabled ? BRAID_PERCENT : 0);
+    decorateMaze(state.cells, cols, rows, rand);
     state.everLost = false;
     state.fromLoad = false;
     if (sizeKey === 'custom') {
@@ -2575,12 +2862,14 @@
       let unwinds = parseInt(customUnwinds.value, 10);
       if (isNaN(unwinds)) unwinds = computeUnwindLimit(cols, rows);
       state.unwindLimit = Math.min(30, Math.max(0, unwinds));
+      state.baseUnwindLimit = state.unwindLimit;
 
       let limitMin = parseFloat(customTimeLimit.value);
       state.timeLimit = (!isNaN(limitMin) && limitMin > 0) ? Math.round(Math.min(60, limitMin) * 60) : null;
     } else {
       state.peekLimit = computePeekLimit(cols, rows);
       state.unwindLimit = computeUnwindLimit(cols, rows);
+      state.baseUnwindLimit = state.unwindLimit;
       state.timeLimit = TIME_LIMITS[sizeKey] || null;
     }
     if (statTimeLabel) statTimeLabel.textContent = state.timeLimit ? 'Time left' : 'Time';
@@ -2676,6 +2965,10 @@
     state.peeksUsed = 0;
     state.peekCells = [];
     state.unwindsUsed = 0;
+    state.unwindLimit = state.baseUnwindLimit;
+    state.itemsCollected = new Set();
+    state.hasKey = false;
+    state.visionBoostUntil = 0;
     state.paused = false;
     state.pauseUsed = false;
     state.falling = false;
@@ -2702,6 +2995,8 @@
   function resetActiveMazeState() {
     resetProgress();
     state.cells = [];
+    state.items = {};
+    state.gates = [];
     state.mazeReady = false;
     // Also clear the "picked" size so a leftover selection from the last
     // account (e.g. Daily) doesn't sit highlighted as if it were already
@@ -2783,6 +3078,8 @@
   // ---------- Fog of war ----------
   const FOG_PREF_KEY = 'deepDelveFogOfWar';
   try { state.fogOfWar = localStorage.getItem(FOG_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
+  try { state.braidEnabled = localStorage.getItem(BRAID_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
+  try { state.itemsEnabled = localStorage.getItem(ITEMS_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
   let audioCtx = null;
   function getAudioCtx() {
     if (!soundEnabled) return null;
@@ -3084,6 +3381,32 @@
     btn.setAttribute('aria-pressed', String(state.fogOfWar));
   }
 
+  // Both take effect on the next maze generated (New maze / a fresh size
+  // pick) — flipping the toggle mid-run doesn't retroactively rewrite the
+  // maze you're already standing in.
+  function setBraidEnabled(on) {
+    state.braidEnabled = on;
+    try { localStorage.setItem(BRAID_PREF_KEY, on ? 'on' : 'off'); } catch (e) { /* storage unavailable */ }
+    syncBraidButton();
+  }
+  function syncBraidButton() {
+    const btn = document.getElementById('btnBraidToggle');
+    if (!btn) return;
+    btn.textContent = state.braidEnabled ? '🔀 Braided paths: On' : '🔀 Braided paths: Off';
+    btn.setAttribute('aria-pressed', String(state.braidEnabled));
+  }
+  function setItemsEnabled(on) {
+    state.itemsEnabled = on;
+    try { localStorage.setItem(ITEMS_PREF_KEY, on ? 'on' : 'off'); } catch (e) { /* storage unavailable */ }
+    syncItemsButton();
+  }
+  function syncItemsButton() {
+    const btn = document.getElementById('btnItemsToggle');
+    if (!btn) return;
+    btn.textContent = state.itemsEnabled ? '💎 Collectibles: On' : '💎 Collectibles: Off';
+    btn.setAttribute('aria-pressed', String(state.itemsEnabled));
+  }
+
   // ---------- Movement ----------
   function tryMove(dirKey) {
     if (state.won || state.lost || state.paused || state.falling || state.finishing) return;
@@ -3091,6 +3414,7 @@
     const idx = y * state.cols + x;
     const cell = state.cells[idx];
     if (!cell || cell[dirKey]) { flagWallBump(); return; }
+    if (isGateLocked(x, y, dirKey)) { flagGateLocked(); return; }
 
     const d = DIRS[dirKey];
     const nx = x + d.dx, ny = y + d.dy;
@@ -3118,6 +3442,7 @@
     state.trail.add(trailKey);
     state.pathLog.push([state.player.x, state.player.y]);
     playFootstepSound();
+    collectItemAt(state.player.x, state.player.y);
     updateStats();
     draw();
     scrollToPlayer();
@@ -3128,17 +3453,53 @@
     if (isExit) { startFinishSequence(); return; }
 
     const newCell = state.cells[state.player.y * state.cols + state.player.x];
-    if (openCount(newCell) === 1) {
+    if (openCountEffective(newCell, state.player.x, state.player.y) === 1) {
       // A dead end with unwinds still in the bank is recoverable — just a
       // warning toast. A dead end with none left is final: there's no legal
       // move out of it (retracing is blocked, and Unwind is spent), so the
-      // run is over and the character falls.
+      // run is over and the character falls. Torches and crystals carry
+      // this same risk — grabbing one can still strand you if the branch
+      // runs deeper than your remaining budget. Keys are the one exception:
+      // collectItemAt tops up the budget for those since a gated maze is
+      // literally unwinnable without one.
       if (state.unwindsUsed >= state.unwindLimit) {
         handleFall();
       } else {
         flagDeadEnd();
       }
     }
+  }
+
+  // Picks up a torch, crystal, or key sitting on the cell just entered, if
+  // any and if not already collected this run. Torches light a wider circle
+  // under Fog of War for a while, crystals grow the Unwind budget by one for
+  // the rest of this run, and a key opens every locked gate in the maze.
+  function collectItemAt(x, y) {
+    const key = `${x},${y}`;
+    const item = state.items[key];
+    if (!item || state.itemsCollected.has(key)) return false;
+    state.itemsCollected.add(key);
+    if (item.type === 'torch') {
+      // Bonus loot — genuinely risky to fetch. No budget guarantee: if the
+      // branch is deeper than your remaining unwinds, grabbing it can still
+      // strand you. That's the "reward risk-taking" bargain.
+      state.visionBoostUntil = performance.now() + TORCH_BOOST_DURATION;
+      flagItemPickup('🔥 Torch lit — you can see further for a bit.');
+    } else if (item.type === 'crystal') {
+      // Also bonus loot, same risk as a torch — its own +1 is the reward,
+      // not a safety net for the retreat.
+      state.unwindLimit += 1;
+      syncUnwindButton();
+      flagItemPickup('💎 Unwind crystal — +1 unwind.');
+    } else if (item.type === 'key') {
+      // The key is mandatory, not bonus loot — without it a gated maze is
+      // literally unwinnable, so it's the one pickup that's never a trap:
+      // top up the budget to cover the full retreat, however deep it is.
+      state.hasKey = true;
+      flagItemPickup('🗝️ Key found — the gate ahead is open.');
+      ensureEscapeBudget(item.escapeCost || 1);
+    }
+    return true;
   }
 
   // ---------- Swipe gestures (mobile) ----------
@@ -3629,6 +3990,7 @@
       const cell = cells[curIdx];
       for (const dirKey of Object.keys(DIRS)) {
         if (cell[dirKey]) continue; // wall in that direction
+        if (isGateLocked(cur.x, cur.y, dirKey)) continue; // locked gate — Peek routes toward the key instead
         const d = DIRS[dirKey];
         const nx = cur.x + d.dx, ny = cur.y + d.dy;
         if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
@@ -3743,6 +4105,28 @@
     backBlockedToast.classList.add('show');
     clearTimeout(backBlockedTimer);
     backBlockedTimer = setTimeout(() => backBlockedToast.classList.remove('show'), 1600);
+  }
+
+  function flagGateLocked() {
+    playWallBumpSound();
+    if (!mazeScroll) return;
+    mazeScroll.classList.remove('wall-bump');
+    void mazeScroll.offsetWidth;
+    mazeScroll.classList.add('wall-bump');
+    if (!gateLockedToast) return;
+    gateLockedToast.classList.add('show');
+    clearTimeout(gateLockedTimer);
+    gateLockedTimer = setTimeout(() => gateLockedToast.classList.remove('show'), 1800);
+  }
+
+  function flagItemPickup(message) {
+    if (navigator.vibrate) navigator.vibrate(40);
+    playArrivalChime();
+    if (!itemPickupToast || !itemPickupText) return;
+    itemPickupText.textContent = message;
+    itemPickupToast.classList.add('show');
+    clearTimeout(itemPickupTimer);
+    itemPickupTimer = setTimeout(() => itemPickupToast.classList.remove('show'), 1800);
   }
 
   // ---------- Rendering ----------
@@ -3980,6 +4364,9 @@
     ctx.strokeStyle = themeCanvas.border;
     ctx.lineWidth = Math.max(2, cellSize * 0.11);
     ctx.strokeRect(1, 1, w - 2, h - 2);
+
+    drawGates(themeCanvas);
+    drawItems();
 
     const ex = (state.cols - 1) * cellSize + cellSize / 2;
     const ey = (state.rows - 1) * cellSize + cellSize / 2;
@@ -4231,7 +4618,58 @@
     ctx.restore();
   }
 
-  // Fog of war: cells you're currently near stay fully lit, cells you've
+  // Draws a locked gate as a bright, dashed bar across the passage it seals
+  // (instead of the normal wall stroke, since there's no real wall there in
+  // the cell data) plus a small lock glyph. Once state.hasKey is true the
+  // gate is simply gone — nothing left to draw or block movement.
+  function drawGates(themeCanvas) {
+    if (!state.gates || !state.gates.length || state.hasKey) return;
+    ctx.save();
+    ctx.strokeStyle = `rgb(${themeCanvas.torchRgb})`;
+    ctx.lineWidth = Math.max(2, cellSize * 0.16);
+    ctx.lineCap = 'round';
+    ctx.setLineDash([cellSize * 0.14, cellSize * 0.1]);
+    state.gates.forEach(g => {
+      const ax = g.ax * cellSize, ay = g.ay * cellSize;
+      const d = DIRS[g.adir];
+      let x1, y1, x2, y2;
+      if (d.dx !== 0) { x1 = x2 = ax + (d.dx > 0 ? cellSize : 0); y1 = ay; y2 = ay + cellSize; }
+      else { y1 = y2 = ay + (d.dy > 0 ? cellSize : 0); x1 = ax; x2 = ax + cellSize; }
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = `${Math.floor(cellSize * 0.5)}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🔒', (x1 + x2) / 2, (y1 + y2) / 2);
+      ctx.setLineDash([cellSize * 0.14, cellSize * 0.1]);
+    });
+    ctx.restore();
+  }
+
+  const ITEM_EMOJI = { torch: '🔥', crystal: '💎', key: '🗝️' };
+  function drawItems() {
+    if (!state.items) return;
+    const keys = Object.keys(state.items);
+    if (!keys.length) return;
+    ctx.save();
+    ctx.font = `${Math.floor(cellSize * 0.5)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    keys.forEach(key => {
+      if (state.itemsCollected.has(key)) return;
+      const [ix, iy] = key.split(',').map(Number);
+      const cx = ix * cellSize + cellSize / 2;
+      const cy = iy * cellSize + cellSize / 2;
+      const bob = Math.sin(pulseT * 1.4 + ix + iy) * cellSize * 0.05;
+      ctx.fillText(ITEM_EMOJI[state.items[key].type] || '❔', cx, cy + bob);
+    });
+    ctx.restore();
+  }
+
+
   // already walked through are dimly "remembered" (walls visible, no glow),
   // and everything else is hidden under near-opaque fog until you reach it.
   // An active Peek preview also lifts the fog along its path, since a hint
@@ -4242,12 +4680,14 @@
   function drawFog() {
     if (!state.fogOfWar) return;
     const px = state.player.x, py = state.player.y;
+    const boosted = performance.now() < state.visionBoostUntil;
+    const radius = FOG_LIT_RADIUS + (boosted ? TORCH_VISION_BOOST : 0);
     const peekSet = new Set((state.peekCells || []).map(c => `${c.x},${c.y}`));
     ctx.save();
     for (let y = 0; y < state.rows; y++) {
       for (let x = 0; x < state.cols; x++) {
         const dx = x - px, dy = y - py;
-        if (Math.sqrt(dx * dx + dy * dy) <= FOG_LIT_RADIUS) continue;
+        if (Math.sqrt(dx * dx + dy * dy) <= radius) continue;
         if (peekSet.has(`${x},${y}`)) continue;
         const visited = state.trail.has(`${x},${y}`);
         ctx.fillStyle = visited ? `rgba(4,6,10,${FOG_MEMORY_ALPHA})` : `rgba(4,6,10,${FOG_UNKNOWN_ALPHA})`;
@@ -4497,6 +4937,15 @@
       state.cols = data.c;
       state.rows = data.r;
       state.cells = hexToCells(data.w, data.c * data.r);
+      // Saved/challenge payloads don't carry item or gate layouts (kept out
+      // of the wire format on purpose), so a resumed or challenge maze
+      // simply plays without them rather than risking a stale layout from
+      // whatever maze was in memory before this load.
+      state.items = {};
+      state.gates = [];
+      state.itemsCollected = new Set();
+      state.hasKey = false;
+      state.visionBoostUntil = 0;
       state.player = { x: data.px, y: data.py };
       state.moves = data.mv || 0;
       state.seconds = data.s || 0;
@@ -4549,6 +4998,7 @@
       state.peekLimit = (typeof data.pl === 'number') ? Math.max(0, data.pl) : computePeekLimit(state.cols, state.rows);
       state.peeksUsed = (typeof data.pu === 'number') ? Math.max(0, Math.min(state.peekLimit, data.pu)) : 0;
       state.unwindLimit = (typeof data.ul === 'number') ? Math.max(0, data.ul) : computeUnwindLimit(state.cols, state.rows);
+      state.baseUnwindLimit = state.unwindLimit;
       state.unwindsUsed = (typeof data.uu === 'number') ? Math.max(0, Math.min(state.unwindLimit, data.uu)) : 0;
       if (state.sizeKey === 'custom') {
         customHints.value = state.peekLimit;
@@ -5970,6 +6420,8 @@
   document.getElementById('btnRestart').addEventListener('click', restartMaze);
   document.getElementById('btnToggleSound').addEventListener('click', () => setSoundEnabled(!soundEnabled));
   document.getElementById('btnFogToggle').addEventListener('click', () => setFogOfWar(!state.fogOfWar));
+  document.getElementById('btnBraidToggle').addEventListener('click', () => setBraidEnabled(!state.braidEnabled));
+  document.getElementById('btnItemsToggle').addEventListener('click', () => setItemsEnabled(!state.itemsEnabled));
 
   // ---------- UI wiring: challenge link ----------
   document.getElementById('btnSendChallenge').addEventListener('click', async () => {
@@ -6282,6 +6734,8 @@
   syncSizeButtons();
   syncSoundButton();
   syncFogButton();
+  syncBraidButton();
+  syncItemsButton();
   syncPeekButton();
   syncUnwindButton();
   syncPauseButton();
