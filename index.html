@@ -1571,7 +1571,7 @@
             </section>
             <section>
               <h4>Opening a challenge</h4>
-              <p>Whoever opens the link lands on the sign-in screen first, with the challenge maze already waiting. They can sign in, create an account, or tap "Play as guest" — either way, the very next screen drops them straight into the exact same maze layout you sent, from square one. Signing in (or creating an account) means their solve gets saved to their history and counts toward their badges; playing as a guest is quicker, but that run won't be saved anywhere once they close the tab.</p>
+              <p>Whoever opens the link lands on the sign-in screen first, with the challenge maze already waiting. Once they sign in or create an account, the very next screen drops them straight into the exact same maze layout you sent, from square one — and their solve gets saved to their history and counts toward their badges.</p>
             </section>
           </div>
         </div>
@@ -2382,9 +2382,9 @@
   let customImg = null;
   let customImgLoaded = false;
   // Set once at startup if the page was opened via a challenge link. Used to
-  // route the sign-in screen's "Continue" and "Play as guest" buttons
-  // straight into that pre-loaded maze instead of the normal setup screen —
-  // see enterGameOrSetup() below. Cleared after first use.
+  // route a successful sign-in / account creation straight into that
+  // pre-loaded maze instead of the normal setup screen — see
+  // enterGameOrSetup() below. Cleared after first use.
   let cameFromChallenge = false;
 
   // ---------- Elements ----------
@@ -6668,10 +6668,10 @@
 
   // A challenge link's maze is already loaded and waiting in state (see
   // applyChallengeFromHash in Init below) — once the recipient has signed
-  // in, created an account, or chosen to play as a guest, this drops them
-  // straight into that maze instead of the normal setup screen where they'd
-  // pick their own size/theme. Only fires once per visit; after that,
-  // Continue / Play as guest behave normally.
+  // in or created an account, this drops them straight into that maze
+  // instead of the normal setup screen where they'd pick their own
+  // size/theme. Only fires once per visit; after that, sign-in/account
+  // creation behave normally.
   function enterGameOrSetup() {
     if (cameFromChallenge) {
       cameFromChallenge = false;
@@ -6701,7 +6701,7 @@
   });
   // Sign-out already resets account state elsewhere — this just brings the
   // player back to the sign-in screen afterward so they can sign into a
-  // different account or continue as a guest.
+  // different account.
   document.getElementById('btnSignOut').addEventListener('click', () => showScreen('signin'));
 
   // ---------- UI wiring: feedback page ----------
@@ -6748,10 +6748,10 @@
     applyNewMaze(SIZES.medium.cols, SIZES.medium.rows, 'medium');
   } else {
     // Let them know why they're here before they sign in / create an
-    // account / play as guest — the actual maze is already loaded and
-    // waiting (see enterGameOrSetup above).
+    // account — the actual maze is already loaded and waiting (see
+    // enterGameOrSetup above).
     const tagline = document.querySelector('#screenSignIn .tagline');
-    if (tagline) tagline.textContent = "A friend challenged you to a maze! Sign in, create an account, or play as guest to jump in.";
+    if (tagline) tagline.textContent = "A friend challenged you to a maze! Sign in or create an account to jump in.";
   }
   requestAnimationFrame(animLoop);
 
@@ -6772,10 +6772,10 @@
   });
 
   // Every visit — including challenge links — starts at sign-in now, so a
-  // challenge solve can actually be tied to an account. Signing in,
-  // creating an account, or tapping "Play as guest" all route onward via
-  // enterGameOrSetup(), which drops a challenge recipient straight into
-  // their pre-loaded maze instead of the normal setup screen.
+  // challenge solve can actually be tied to an account. Signing in or
+  // creating an account routes onward via enterGameOrSetup(), which drops
+  // a challenge recipient straight into their pre-loaded maze instead of
+  // the normal setup screen.
   showScreen('signin');
 })();
 </script>
