@@ -1258,10 +1258,6 @@
         <button class="primary" id="btnResumeMaze" style="display:none;">↩ Resume last maze</button>
       </div>
     </div>
-
-    <button class="secondary" id="btnPlayGuest" style="padding:12px; font-size:14px; margin-bottom:10px;">Play as guest</button>
-
-    <button class="primary" id="btnEnterGame" style="padding:14px; font-size:15px; margin-bottom:40px;">Continue →</button>
   </div>
 </div>
 
@@ -6181,6 +6177,10 @@
       refreshThemeUnlocks();
       accountNote.textContent = result.warn || 'Account created and signed in.';
       accountNote.className = result.warn ? 'field-note error' : 'field-note success';
+      // No more "Continue" button to click through — a successful account
+      // creation moves the player straight on to setup/game (or their
+      // pending challenge maze) themselves.
+      enterGameOrSetup();
     } else {
       accountNote.textContent = result.msg;
       accountNote.className = 'field-note error';
@@ -6211,6 +6211,9 @@
       refreshThemeUnlocks();
       accountNote.textContent = 'Signed in.';
       accountNote.className = 'field-note success';
+      // Same as account creation — sign-in now advances the player itself
+      // since there's no separate "Continue" button anymore.
+      enterGameOrSetup();
     } else {
       accountNote.textContent = result.msg;
       accountNote.className = 'field-note error';
@@ -6678,8 +6681,6 @@
     }
   }
 
-  document.getElementById('btnEnterGame').addEventListener('click', () => enterGameOrSetup());
-  document.getElementById('btnPlayGuest').addEventListener('click', () => enterGameOrSetup());
   document.getElementById('btnSetupToAccount').addEventListener('click', () => showScreen('signin'));
   document.getElementById('btnSetupNext').addEventListener('click', () => showScreen('game'));
   document.getElementById('btnGoSetup').addEventListener('click', () => showScreen('setup'));
@@ -6763,6 +6764,10 @@
       renderAchievements();
       renderFlairs();
       refreshThemeUnlocks();
+      // With the "Continue" button gone, a returning player with a live
+      // session shouldn't be stranded on the sign-in screen — move them
+      // straight on, same as a fresh sign-in.
+      enterGameOrSetup();
     }
   });
 
