@@ -63,4 +63,4 @@ There's a feedback form built into the app (Feedback screen), or you can reach o
 
 ## License
 
-No license has been specified yet — all rights reserved by default.
+No license has been specified yet — all rights reserved by default. 
