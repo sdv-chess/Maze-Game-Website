@@ -10,16 +10,17 @@ Deep Delve is a browser-based maze game with no backtracking — you get a limit
 
 ## Features
 
-- **Procedurally generated mazes** — a new layout every run, in Small, Medium, or Large presets, or a fully Custom size (5–300 cells per side)
+- **Procedurally generated mazes** — a new layout every run, in Small, Medium, or Large presets, or a fully Custom size (5–300 cells per side, with your own hint/unwind budgets and an optional time limit)
 - **No-backtrack gameplay** — walk into a dead end and the run is over, unless you spend one of your limited **Unwinds** (step back one cell) or use a **Peek** (briefly reveals the way forward). Budgets scale with maze size
-- **Level Mode** — an endless staircase of mazes that grows wider, taller, and tougher every level, with jump-to-level navigation
+- **Braided paths & collectibles** — optional extras that make dead ends less punishing: braiding opens a handful of dead ends into loops, while collectibles sprinkle torches (bigger fog radius) and unwind crystals (+1 unwind) into dead ends, occasionally alongside a key-and-gate pair that blocks the route to the exit until you fetch its key
+- **Level Mode** — an endless staircase of mazes that grows wider, taller, and tougher every level, with Prev/Next stepping and jump-to-level navigation
 - **Sprint & Marathon modes** — an 8×8 maze against a 1-minute clock, or a sprawling 60×60 grind
 - **Daily Maze** — one shared maze per day, seeded from the date so everyone gets the exact same layout, with a **leaderboard** ranking today's fastest signed-in solvers
 - **Fog of war** — optional setting that only lights the cave near your character, leaving the rest dark until explored
 - **Challenge a friend** — pack your current maze (layout + settings, no progress) into a shareable link; whoever opens it drops straight into the same maze
 - **Replay & practice** — step or play back any solved run, then click into the maze to practice from any point, separate from your recorded path
 - **Accounts & progress** — sign in to save solve history (grouped by maze category), resume mazes in progress, and sync across devices
-- **Achievements** — badges across bronze, silver, gold, platinum, diamond, and mythic ranks, plus unlockable flairs and cosmetic character/theme unlocks
+- **Achievements, flair & themes** — badges across bronze, silver, gold, platinum, diamond, and mythic ranks (including "Deep Completionist," which needs every Level Mode level from 1–100 solved with none skipped), each unlocking an equippable flair; cosmetic cave themes unlock in strict order as you clear Level Mode, plus an always-free, colorblind-friendly "Clear Sight" theme
 - **Streaks & insights** — daily solve streaks and an insights view summarizing progress across maze types
 - **Sound & accessibility touches** — footstep, win, and dead-end sound effects (toggleable), keyboard (WASD/arrows) and swipe controls, and an in-app "How to Play" guide
 
