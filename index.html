@@ -6930,6 +6930,18 @@
       resizeCanvas();
       draw();
       scrollToPlayer();
+    } else if (name === 'multiplayer') {
+      // hostRace()/joinRace() both bail out immediately if a race is
+      // already active (state.race.active), so navigating back here from
+      // an in-progress race — e.g. via the "🏁 Multiplayer" button on the
+      // game screen — used to leave the old race silently connected,
+      // making "Host a race" / "Join race" appear to do nothing at all.
+      // Landing on this screen means the player wants to set up a *new*
+      // race, so leave whatever race is currently active first.
+      if (state.race.active) {
+        leaveRaceInternal();
+        showRaceSetupUI();
+      }
     }
     window.scrollTo(0, 0);
   }
