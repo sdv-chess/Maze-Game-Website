@@ -1642,6 +1642,34 @@
         </div>
       </div>
 
+      <div class="help-cat" data-cat="multiplayer">
+        <button class="help-cat-header" type="button">
+          <span class="help-cat-emoji">🏁</span>
+          <span class="help-cat-title">Multiplayer<span class="help-cat-sub">Live races against a friend</span></span>
+          <span class="help-cat-arrow">▶</span>
+        </button>
+        <div class="help-cat-body">
+          <div class="help-cat-body-inner">
+            <section>
+              <h4>Hosting or joining a race</h4>
+              <p>Tap "🏁 Multiplayer" in the header to open the race screen. Pick a size and tap "Host a race" to get a room code, or type a friend's code into "Join race" to jump into theirs. Races run without fog of war, braided paths, or collectibles, so everyone's cave is identical and the run stays fair.</p>
+            </section>
+            <section>
+              <h4>Racing live</h4>
+              <p>Everyone in the room solves the exact same maze at the same time, and you can see each other moving through it as you go — first to the torch wins. The sidebar's "Live race" card shows the room code, buttons to copy the code or a shareable link, and a roster with each racer's live move count.</p>
+            </section>
+            <section>
+              <h4>The sidebar while racing</h4>
+              <p>Once a race is under way, "Live race" moves to the top of the sidebar, and the Actions and Challenge a friend cards are hidden — new mazes, fog/braid/collectible toggles, and challenge links don't apply mid-race, so they're tucked away until you're back to solo play.</p>
+            </section>
+            <section>
+              <h4>Leaving a race</h4>
+              <p>Tap "🚪 Leave race" in the Live race card, or tap the header button — it reads "🧍 Single player" while you're racing — to drop out and return to solo setup. You just disappear from the roster; anyone else still in the room keeps racing without you.</p>
+            </section>
+          </div>
+        </div>
+      </div>
+
       <div class="help-cat" data-cat="challenge">
         <button class="help-cat-header" type="button">
           <span class="help-cat-emoji">📤</span>
@@ -2497,6 +2525,14 @@
   let cameFromRaceLink = false;
   let pendingRaceCode = null;
   let raceJoinTimeout = null;
+  // Tracks whether the game screen is showing race UI (Live race card up
+  // top, header button reading "Single player"). Deliberately separate
+  // from state.race.active: showRaceActiveUI() runs the moment hosting/
+  // joining starts, before the realtime channel actually connects and
+  // flips state.race.active to true, so gating the UI on that flag made
+  // it lag — the header kept saying "Multiplayer" through the whole
+  // connecting phase.
+  let raceUIActive = false;
 
   // ---------- Elements ----------
   const canvas = document.getElementById('mazeCanvas');
@@ -6935,14 +6971,14 @@
       draw();
       scrollToPlayer();
     } else if (name === 'multiplayer') {
-      // hostRace()/joinRace() both bail out immediately if a race is
-      // already active (state.race.active), so navigating back here from
-      // an in-progress race — e.g. via the "🏁 Multiplayer" button on the
-      // game screen — used to leave the old race silently connected,
-      // making "Host a race" / "Join race" appear to do nothing at all.
-      // Landing on this screen means the player wants to set up a *new*
-      // race, so leave whatever race is currently active first.
-      if (state.race.active) {
+      // hostRace()/joinRace() both bail out immediately while a race is
+      // already active, so navigating back here from an in-progress race
+      // — e.g. via the "🧍 Single player" button on the game screen used
+      // to leave the old race silently connected, making "Host a race" /
+      // "Join race" appear to do nothing at all. Landing on this screen
+      // means the player wants to set up a *new* race, so leave whatever
+      // race is currently shown first.
+      if (raceUIActive) {
         leaveRaceInternal();
         showRaceSetupUI();
       }
@@ -6975,11 +7011,11 @@
   document.getElementById('btnSetupNext').addEventListener('click', () => showScreen('game'));
   document.getElementById('btnGoSetup').addEventListener('click', () => showScreen('setup'));
   btnGoMultiplayer.addEventListener('click', () => {
-    // While a race is actually active, this button reads "Single player"
+    // While race UI is showing, this button reads "Single player"
     // (see syncGameHeaderModeButton) — clicking it leaves the race and
     // drops back into solo setup, rather than opening the multiplayer
     // screen we just came from.
-    if (state.race.active) {
+    if (raceUIActive) {
       leaveRaceInternal();
       showRaceSetupUI();
       showScreen('setup');
@@ -7078,7 +7114,7 @@
   // state.race.active is true — see the btnGoMultiplayer handler above.
   function syncGameHeaderModeButton() {
     if (!btnGoMultiplayer) return;
-    if (state.race.active) {
+    if (raceUIActive) {
       btnGoMultiplayer.textContent = '🧍 Single player';
       btnGoMultiplayer.title = 'Leave this race and play solo';
     } else {
@@ -7098,6 +7134,7 @@
     if (gamePanel && raceActiveCard && challengeCard && challengeCard.nextSibling !== raceActiveCard) {
       gamePanel.insertBefore(raceActiveCard, challengeCard.nextSibling);
     }
+    raceUIActive = false;
     syncGameHeaderModeButton();
   }
 
@@ -7119,6 +7156,7 @@
     if (gamePanel && raceActiveCard && gamePanel.firstElementChild !== raceActiveCard) {
       gamePanel.insertBefore(raceActiveCard, gamePanel.firstElementChild);
     }
+    raceUIActive = true;
     syncGameHeaderModeButton();
   }
 
