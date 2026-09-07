@@ -1508,8 +1508,8 @@
       <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving.</p>
     </div>
 
-    <div class="panel">
-      <div class="card">
+    <div class="panel" id="gamePanel">
+      <div class="card" id="actionsCard">
         <h2>Actions</h2>
         <div class="actions">
           <button class="primary" id="btnNew">New maze</button>
@@ -1531,7 +1531,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="challengeCard">
         <h2>Challenge a friend</h2>
         <div class="stack-gap">
           <p class="field-note">Sends this exact maze layout, fresh with no progress, straight to a friend — whoever opens it solves the very same cave, from the same start.</p>
@@ -2616,6 +2616,10 @@
   const raceSetupBlock = document.getElementById('raceSetupBlock');
   const raceActiveBlock = document.getElementById('raceActiveBlock');
   const raceActiveCard = document.getElementById('raceActiveCard');
+  const gamePanel = document.getElementById('gamePanel');
+  const actionsCard = document.getElementById('actionsCard');
+  const challengeCard = document.getElementById('challengeCard');
+  const btnGoMultiplayer = document.getElementById('btnGoMultiplayer');
   const raceCustomPanel = document.getElementById('raceCustomPanel');
   const raceCustomWidth = document.getElementById('raceCustomWidth');
   const raceCustomHeight = document.getElementById('raceCustomHeight');
@@ -6970,7 +6974,19 @@
   document.getElementById('btnSetupToAccount').addEventListener('click', () => showScreen('signin'));
   document.getElementById('btnSetupNext').addEventListener('click', () => showScreen('game'));
   document.getElementById('btnGoSetup').addEventListener('click', () => showScreen('setup'));
-  document.getElementById('btnGoMultiplayer').addEventListener('click', () => showScreen('multiplayer'));
+  btnGoMultiplayer.addEventListener('click', () => {
+    // While a race is actually active, this button reads "Single player"
+    // (see syncGameHeaderModeButton) — clicking it leaves the race and
+    // drops back into solo setup, rather than opening the multiplayer
+    // screen we just came from.
+    if (state.race.active) {
+      leaveRaceInternal();
+      showRaceSetupUI();
+      showScreen('setup');
+    } else {
+      showScreen('multiplayer');
+    }
+  });
   document.getElementById('btnModeToAccount').addEventListener('click', () => showScreen('signin'));
   document.getElementById('btnModeSingle').addEventListener('click', () => showScreen('setup'));
   document.getElementById('btnModeMulti').addEventListener('click', () => showScreen('multiplayer'));
@@ -7057,10 +7073,32 @@
   // while the "live race" roster card lives in the game screen's sidebar —
   // so leaving a race just hides that sidebar card, it doesn't need to
   // swap two blocks in the same card anymore.
+  // The header's mode button reads "🏁 Multiplayer" (→ set up a race)
+  // when solo, and "🧍 Single player" (→ leave the current race) once
+  // state.race.active is true — see the btnGoMultiplayer handler above.
+  function syncGameHeaderModeButton() {
+    if (!btnGoMultiplayer) return;
+    if (state.race.active) {
+      btnGoMultiplayer.textContent = '🧍 Single player';
+      btnGoMultiplayer.title = 'Leave this race and play solo';
+    } else {
+      btnGoMultiplayer.textContent = '🏁 Multiplayer';
+      btnGoMultiplayer.title = '';
+    }
+  }
+
   function showRaceSetupUI() {
     if (raceActiveCard) raceActiveCard.style.display = 'none';
     raceSetupNote.textContent = '';
     raceSetupNote.className = 'field-note';
+    // Racing hid Actions/Challenge and moved Live race to the top of the
+    // sidebar (see showRaceActiveUI) — restore the normal solo layout.
+    if (actionsCard) actionsCard.style.display = '';
+    if (challengeCard) challengeCard.style.display = '';
+    if (gamePanel && raceActiveCard && challengeCard && challengeCard.nextSibling !== raceActiveCard) {
+      gamePanel.insertBefore(raceActiveCard, challengeCard.nextSibling);
+    }
+    syncGameHeaderModeButton();
   }
 
   function showRaceActiveUI(code, waiting) {
@@ -7072,6 +7110,16 @@
     raceActiveNote.textContent = waiting ? 'Connecting to the host…' : '';
     raceActiveNote.className = 'field-note';
     renderRaceRoster();
+    // Mid-race, the New maze / fog / braid / collectible toggles in
+    // Actions would desync the room, and Challenge a friend duplicates
+    // what the race roster's code/link buttons already do — so both are
+    // hidden and Live race takes the top slot instead of the bottom.
+    if (actionsCard) actionsCard.style.display = 'none';
+    if (challengeCard) challengeCard.style.display = 'none';
+    if (gamePanel && raceActiveCard && gamePanel.firstElementChild !== raceActiveCard) {
+      gamePanel.insertBefore(raceActiveCard, gamePanel.firstElementChild);
+    }
+    syncGameHeaderModeButton();
   }
 
   // Presence is how every racer's position, move count, and finish status
