@@ -4536,6 +4536,13 @@
     for (let y = 0; y < state.rows; y++) {
       for (let x = 0; x < state.cols; x++) {
         const c = state.cells[y * state.cols + x];
+        // Between resetActiveMazeState() clearing state.cells and the next
+        // maze actually finishing generation (e.g. mid sign-in, or while a
+        // race/challenge maze is still being fetched), cells here can be
+        // briefly empty — skip rather than throw, since animLoop below
+        // calls draw() every frame and an uncaught error here would kill
+        // the render loop for good, not just this one frame.
+        if (!c) continue;
         const px = x * cellSize, py = y * cellSize;
         ctx.beginPath();
         if (c.N) { ctx.moveTo(px, py); ctx.lineTo(px + cellSize, py); }
@@ -5019,7 +5026,19 @@
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
-  function animLoop() { draw(); requestAnimationFrame(animLoop); }
+  // requestAnimationFrame(animLoop) only reschedules the NEXT frame if this
+  // call returns normally — an uncaught error in draw() would otherwise
+  // stop the whole render loop permanently (nothing redraws again until a
+  // manual page reload). The try/catch keeps a single bad frame from
+  // taking the whole game down with it.
+  function animLoop() {
+    try {
+      draw();
+    } catch (err) {
+      console.error('draw() error (frame skipped):', err);
+    }
+    requestAnimationFrame(animLoop);
+  }
 
   // ---------- Custom character image ----------
   function loadCustomImage(src, fromUpload) {
@@ -6407,7 +6426,12 @@
     const result = await createAccount(username, password);
     if (result.ok) {
       state.currentUser = username;
-      resetActiveMazeState();
+      // Skip the wipe when a challenge or race link is waiting — that
+      // maze was just loaded for THIS fresh visit, not left over from a
+      // different signed-in account, so clearing it here (before
+      // enterGameOrSetup ever gets to redraw it) used to blank the canvas
+      // and abort the race-join/challenge-enter that was about to run.
+      if (!cameFromChallenge && !cameFromRaceLink) resetActiveMazeState();
       state.solvedRecords = await loadSolvedRecords(username);
       state.equippedFlair = await loadEquippedFlair(username);
       state.inProgressMaze = await loadInProgressMaze(username);
@@ -6441,7 +6465,8 @@
     const result = await signIn(username, password);
     if (result.ok) {
       state.currentUser = username;
-      resetActiveMazeState();
+      // See the matching comment in btnCreateAccount above.
+      if (!cameFromChallenge && !cameFromRaceLink) resetActiveMazeState();
       state.solvedRecords = await loadSolvedRecords(username);
       state.equippedFlair = await loadEquippedFlair(username);
       state.inProgressMaze = await loadInProgressMaze(username);
