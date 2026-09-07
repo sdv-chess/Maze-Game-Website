@@ -1466,6 +1466,36 @@
         </div>
       </div>
 
+      <div class="card" id="raceCard">
+        <h2>🏁 Race a friend</h2>
+        <div class="stack-gap" id="raceSetupBlock">
+          <p class="field-note">Race live — everyone moves through the same maze at once, and you'll see each other on the way. First to the torch wins. Races run without fog, braids, or collectibles, to keep things fair and in sync.</p>
+          <div class="row-2">
+            <select class="field" id="raceSizeSelect" aria-label="Race maze size">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+            <button class="primary" id="btnHostRace">Host a race</button>
+          </div>
+          <div class="row-2">
+            <input type="text" class="field" id="raceCodeInput" placeholder="Enter code" maxlength="6" autocomplete="off" style="text-transform:uppercase;" />
+            <button class="secondary" id="btnJoinRace">Join race</button>
+          </div>
+          <p class="field-note" id="raceSetupNote"></p>
+        </div>
+        <div class="stack-gap" id="raceActiveBlock" style="display:none;">
+          <div class="stats-row"><span class="label">Room code</span><span class="value" id="raceCodeDisplay">——</span></div>
+          <div class="row-2">
+            <button class="secondary" id="btnCopyRaceCode">📋 Copy code</button>
+            <button class="secondary" id="btnCopyRaceLink">🔗 Copy link</button>
+          </div>
+          <div id="raceRoster"><p class="lb-empty">Waiting for racers…</p></div>
+          <p class="field-note" id="raceActiveNote"></p>
+          <button class="secondary" id="btnLeaveRace">🚪 Leave race</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -2376,7 +2406,23 @@
     fallParticles: [],
     finishing: false,
     finishStart: 0,
-    finishParticles: []
+    finishParticles: [],
+    // ---------- Live race ----------
+    // Populated by hostRace()/joinRace() below; players is keyed by each
+    // racer's presence id and rebuilt whenever Supabase Realtime presence
+    // changes (syncRaceRosterFromPresence). Torn down by leaveRaceInternal().
+    race: {
+      active: false,
+      code: null,
+      isHost: false,
+      myId: null,
+      seed: null,
+      cols: null,
+      rows: null,
+      mazeReceived: false,
+      players: {},
+      channel: null
+    }
   };
 
   let customImg = null;
@@ -2386,6 +2432,12 @@
   // pre-loaded maze instead of the normal setup screen — see
   // enterGameOrSetup() below. Cleared after first use.
   let cameFromChallenge = false;
+  // Same idea, but for a race link (#race=CODE) — routes straight to the
+  // game screen and then auto-joins that race once signed in. See
+  // checkRaceHash() and enterGameOrSetup() below.
+  let cameFromRaceLink = false;
+  let pendingRaceCode = null;
+  let raceJoinTimeout = null;
 
   // ---------- Elements ----------
   const canvas = document.getElementById('mazeCanvas');
@@ -2498,6 +2550,16 @@
   const challengeNote = document.getElementById('challengeNote');
   const challengeBanner = document.getElementById('challengeBanner');
   const challengeBannerText = document.getElementById('challengeBannerText');
+
+  // ---------- Elements: live race ----------
+  const raceSizeSelect = document.getElementById('raceSizeSelect');
+  const raceCodeInput = document.getElementById('raceCodeInput');
+  const raceSetupBlock = document.getElementById('raceSetupBlock');
+  const raceActiveBlock = document.getElementById('raceActiveBlock');
+  const raceSetupNote = document.getElementById('raceSetupNote');
+  const raceActiveNote = document.getElementById('raceActiveNote');
+  const raceCodeDisplay = document.getElementById('raceCodeDisplay');
+  const raceRosterEl = document.getElementById('raceRoster');
 
   // ---------- Maze generation ----------
   // Small deterministic PRNG (mulberry32) so the daily maze can be regenerated
@@ -2879,6 +2941,37 @@
     syncSetupNextButton();
   }
 
+  // A race maze is seeded off the room code (see hostRace/joinRace below) so
+  // every racer's client generates the exact same layout independently —
+  // only the seed travels over the network, not the walls themselves. Braid
+  // loops and collectibles are left off on purpose: both are randomized
+  // per-client from the maze's own RNG stream, so turning them on here would
+  // desync visually (or, for collectibles, would need every pickup relayed
+  // in real time to stay fair) without adding much to a race.
+  function applyRaceMaze(cols, rows, seed) {
+    state.sizeKey = 'race';
+    state.cols = cols;
+    state.rows = rows;
+    state.cells = generateMaze(cols, rows, mulberry32(seed));
+    state.items = {};
+    state.gates = [];
+    state.everLost = false;
+    state.fromLoad = false;
+    state.peekLimit = computePeekLimit(cols, rows);
+    state.unwindLimit = computeUnwindLimit(cols, rows);
+    state.baseUnwindLimit = state.unwindLimit;
+    state.timeLimit = null;
+    if (statTimeLabel) statTimeLabel.textContent = 'Time';
+    if (timeLimitNote) timeLimitNote.style.display = 'none';
+    resetProgress();
+    resizeCanvas();
+    draw();
+    scrollToPlayer();
+    playMazeRevealAnim();
+    state.mazeReady = true;
+    syncSetupNextButton();
+  }
+
   // Plays once per freshly-generated maze — a quick fade/scale/blur-in on
   // the maze viewport itself. Restartable the same way as the wall-bump
   // shake, so back-to-back "New maze" taps each get their own reveal.
@@ -2900,6 +2993,18 @@
   }
 
   function newMazeCurrentSize() {
+    // Generating an unrelated maze while a race channel is still open would
+    // leave that channel silently broadcasting stale positions into a maze
+    // other racers can no longer see — cleaner to just leave the race.
+    // Falls back to a plain medium maze at the same size the race was,
+    // since 'race' isn't one of getCurrentDims()'s known size keys.
+    if (state.race.active) {
+      const dims = { cols: state.cols, rows: state.rows };
+      leaveRaceInternal();
+      showRaceSetupUI();
+      applyNewMaze(dims.cols, dims.rows, 'medium');
+      return;
+    }
     const { cols, rows } = getCurrentDims();
     applyNewMaze(cols, rows, state.sizeKey);
   }
@@ -2994,6 +3099,14 @@
     state.items = {};
     state.gates = [];
     state.mazeReady = false;
+    // A race is tied to whichever account joined it (name/character shown
+    // to other racers come from state.currentUser/state.character) — an
+    // account switch mid-race would silently start impersonating the new
+    // account to everyone else in the room, so leave it instead.
+    if (state.race.active) {
+      leaveRaceInternal();
+      showRaceSetupUI();
+    }
     // Also clear the "picked" size so a leftover selection from the last
     // account (e.g. Daily) doesn't sit highlighted as if it were already
     // chosen for the new session — nothing is actually generated yet, so
@@ -3009,6 +3122,9 @@
     resetProgress();
     draw();
     scrollToPlayer();
+    // Same maze, so no need to leave the race — just let other racers see
+    // your ghost reset back to the start along with you.
+    if (state.race.active) updateRacePresence({ finished: false, time: null });
   }
 
   // ---------- Timer ----------
@@ -3446,6 +3562,10 @@
     scheduleAutoSaveMaze();
 
     const isExit = state.player.x === state.cols - 1 && state.player.y === state.rows - 1;
+    // Broadcast the finish the instant the exit is reached — not after the
+    // finish animation plays — so other racers' rosters update promptly and
+    // the recorded time isn't padded by animation length.
+    updateRacePresence(isExit ? { finished: true, time: state.seconds } : null);
     if (isExit) { startFinishSequence(); return; }
 
     const newCell = state.cells[state.player.y * state.cols + state.player.x];
@@ -3770,7 +3890,7 @@
   }
 
   // ---------- Share card ----------
-  const SHARE_SIZE_LABELS = { small: 'a small maze', medium: 'a medium maze', large: 'a large maze', custom: 'a custom maze', daily: "today's daily maze", sprint: 'a Sprint maze', marathon: 'a Marathon maze' };
+  const SHARE_SIZE_LABELS = { small: 'a small maze', medium: 'a medium maze', large: 'a large maze', custom: 'a custom maze', daily: "today's daily maze", sprint: 'a Sprint maze', marathon: 'a Marathon maze', race: 'a live race' };
   function buildShareText(record) {
     const m = Math.floor(record.time / 60).toString().padStart(2, '0');
     const s = (record.time % 60).toString().padStart(2, '0');
@@ -4363,6 +4483,7 @@
 
     drawGates(themeCanvas);
     drawItems();
+    drawRaceGhosts();
 
     const ex = (state.cols - 1) * cellSize + cellSize / 2;
     const ey = (state.rows - 1) * cellSize + cellSize / 2;
@@ -4665,6 +4786,57 @@
     ctx.restore();
   }
 
+  // A stable-per-racer color, hashed from their presence id, so the same
+  // person keeps the same color for the whole race (and two racers who
+  // happen to have picked the same character are still tellable apart).
+  const RACE_PALETTE = ['#FF6B6B', '#B583F7', '#F5A623', '#7EC8E3', '#00F5D4', '#D9A066', '#E8C547', '#4FD6FF', '#FDA4AF', '#7FD858'];
+  function raceColorFor(id) {
+    let h = 0;
+    const str = String(id || '');
+    for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+    return RACE_PALETTE[Math.abs(h) % RACE_PALETTE.length];
+  }
+
+  // Draws every other racer currently in the room as a small colored marker
+  // with their character glyph and name — the "ghosts" that make a race feel
+  // live. Skipped once a racer has finished (they're standing off at the
+  // torch already, drawing them there just adds clutter).
+  function drawRaceGhosts() {
+    if (!state.race || !state.race.active) return;
+    const players = state.race.players || {};
+    Object.keys(players).forEach(id => {
+      const p = players[id];
+      if (!p || id === state.race.myId || p.finished) return;
+      if (typeof p.x !== 'number' || typeof p.y !== 'number') return;
+      const gx = p.x * cellSize + cellSize / 2;
+      const gy = p.y * cellSize + cellSize / 2;
+      const color = raceColorFor(id);
+      const chr = CHARACTERS.find(c => c.id === p.character) || CHARACTERS[0];
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(gx, gy, cellSize * 0.34, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.28;
+      ctx.fill();
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = Math.max(1, cellSize * 0.05);
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      ctx.font = `${Math.floor(cellSize * 0.42)}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(chr.id === 'custom' ? '🖼️' : chr.emoji, gx, gy);
+      if (cellSize >= 20) {
+        ctx.font = `${Math.max(8, Math.floor(cellSize * 0.24))}px "IBM Plex Mono", monospace`;
+        ctx.fillStyle = color;
+        ctx.textBaseline = 'bottom';
+        ctx.textAlign = 'center';
+        ctx.fillText((p.name || '?').slice(0, 12), gx, gy - cellSize * 0.38);
+      }
+      ctx.restore();
+    });
+  }
 
   // already walked through are dimly "remembered" (walls visible, no glow),
   // and everything else is hidden under near-opaque fog until you reach it.
@@ -5251,8 +5423,8 @@
     try { await saveEquippedFlair(state.currentUser, badgeId); } catch (e) { /* stays applied in memory even if the write failed */ }
   }
 
-  const HISTORY_CATEGORY_LABELS = { small: 'Small Mazes', medium: 'Medium Mazes', large: 'Large Mazes', custom: 'Custom Mazes', level: 'Level Mode', daily: 'Daily Mazes', sprint: 'Sprint Mazes', marathon: 'Marathon Mazes' };
-  const HISTORY_CATEGORY_ICONS = { small: '🔹', medium: '🔶', large: '🔺', custom: '⚙️', level: '🏆', daily: '📅', sprint: '⚡', marathon: '🏃' };
+  const HISTORY_CATEGORY_LABELS = { small: 'Small Mazes', medium: 'Medium Mazes', large: 'Large Mazes', custom: 'Custom Mazes', level: 'Level Mode', daily: 'Daily Mazes', sprint: 'Sprint Mazes', marathon: 'Marathon Mazes', race: 'Race Mazes' };
+  const HISTORY_CATEGORY_ICONS = { small: '🔹', medium: '🔶', large: '🔺', custom: '⚙️', level: '🏆', daily: '📅', sprint: '⚡', marathon: '🏃', race: '🏁' };
   const HISTORY_CATEGORY_ORDER = ['small', 'medium', 'large', 'custom', 'level'];
   const HISTORY_PER_CATEGORY = 25;
   // Which category accordions are currently open — remembered across re-renders
@@ -6676,6 +6848,12 @@
     if (cameFromChallenge) {
       cameFromChallenge = false;
       showScreen('game');
+    } else if (cameFromRaceLink) {
+      cameFromRaceLink = false;
+      showScreen('game');
+      const code = pendingRaceCode;
+      pendingRaceCode = null;
+      if (code) joinRace(code);
     } else {
       showScreen('setup');
     }
@@ -6728,6 +6906,274 @@
     note.className = 'field-note success';
   });
 
+  // ---------- Live race (multiplayer) ----------
+  // A "race" is just a Supabase Realtime channel named race-<CODE>. No new
+  // database table is involved: the maze itself is never transmitted, only
+  // the seed it was generated from (see applyRaceMaze above), and live
+  // position/finish data rides on Realtime Presence, which Supabase already
+  // keeps ephemeral and per-connection. Closing the tab or clicking "Leave
+  // race" simply drops the channel — nothing about a race outlives it.
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Avoids visually-ambiguous characters (0/O, 1/I) so a code read aloud or
+  // handwritten is never misheard.
+  function generateRaceCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for (let i = 0; i < 5; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }
+
+  function generateRaceLink(code) {
+    const url = new URL(location.href);
+    url.search = '';
+    url.hash = 'race=' + code;
+    return url.toString();
+  }
+
+  function checkRaceHash() {
+    const m = location.hash.match(/race=([^&]+)/);
+    if (!m) return false;
+    pendingRaceCode = decodeURIComponent(m[1]).toUpperCase();
+    return true;
+  }
+
+  function showRaceSetupUI() {
+    raceSetupBlock.style.display = '';
+    raceActiveBlock.style.display = 'none';
+    raceSetupNote.textContent = '';
+    raceSetupNote.className = 'field-note';
+  }
+
+  function showRaceActiveUI(code, waiting) {
+    raceSetupBlock.style.display = 'none';
+    raceActiveBlock.style.display = '';
+    raceCodeDisplay.textContent = code;
+    raceActiveNote.textContent = waiting ? 'Connecting to the host…' : '';
+    raceActiveNote.className = 'field-note';
+    renderRaceRoster();
+  }
+
+  // Presence is how every racer's position, move count, and finish status
+  // reach everyone else — cheap to send (Supabase diffs it) since moves are
+  // discrete cell-to-cell steps, not a continuous stream.
+  function updateRacePresence(extra) {
+    if (!state.race.active || !state.race.channel || !state.race.mazeReceived) return;
+    const payload = Object.assign({
+      id: state.race.myId,
+      name: state.currentUser || 'Guest',
+      character: state.character,
+      x: state.player.x,
+      y: state.player.y,
+      moves: state.moves,
+      finished: false,
+      time: null
+    }, extra || {});
+    state.race.channel.track(payload).catch(() => {});
+  }
+
+  function syncRaceRosterFromPresence() {
+    if (!state.race.active || !state.race.channel) return;
+    const presenceState = state.race.channel.presenceState();
+    const players = {};
+    Object.keys(presenceState).forEach(key => {
+      const metas = presenceState[key];
+      if (metas && metas.length) players[key] = metas[metas.length - 1];
+    });
+    state.race.players = players;
+    renderRaceRoster();
+    draw();
+  }
+
+  function renderRaceRoster() {
+    if (!raceRosterEl) return;
+    const players = Object.values(state.race.players || {});
+    if (!players.length) { raceRosterEl.innerHTML = '<p class="lb-empty">Waiting for racers…</p>'; return; }
+    const sorted = players.slice().sort((a, b) => {
+      if (a.finished && b.finished) return (a.time || 0) - (b.time || 0);
+      if (a.finished) return -1;
+      if (b.finished) return 1;
+      return (b.moves || 0) - (a.moves || 0);
+    });
+    let html = '<div class="lb-list">';
+    sorted.forEach((p, i) => {
+      const rank = i + 1;
+      const isMe = p.id === state.race.myId;
+      const chr = CHARACTERS.find(c => c.id === p.character) || CHARACTERS[0];
+      const glyph = chr.id === 'custom' ? '🖼️' : chr.emoji;
+      const status = p.finished ? `🏁 ${formatLbTime(p.time || 0)}` : `${p.moves || 0} moves`;
+      html += `
+        <div class="lb-row rank-${rank}${isMe ? ' me' : ''}">
+          <span class="lb-rank">${rank <= 3 && p.finished ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
+          <span class="lb-name">${glyph} ${escapeHtml(p.name || 'Guest')}</span>
+          <span class="lb-stats">${status}</span>
+        </div>`;
+    });
+    html += '</div>';
+    raceRosterEl.innerHTML = html;
+  }
+
+  function broadcastRoomInfo() {
+    if (!state.race.channel || !state.race.isHost) return;
+    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed } });
+  }
+
+  // Tears down whatever race channel is currently open, if any, without
+  // touching the UI — used both by "Leave race" and just before joining or
+  // hosting a new one, so a stale connection never lingers alongside a new
+  // one.
+  function leaveRaceInternal() {
+    if (state.race.channel) {
+      try { state.race.channel.unsubscribe(); } catch (e) { /* already gone */ }
+    }
+    clearTimeout(raceJoinTimeout);
+    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, mazeReceived: false, players: {}, channel: null };
+  }
+
+  function connectRaceChannel(code, isHost, seed, dims) {
+    leaveRaceInternal();
+    const myId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('p-' + Math.random().toString(36).slice(2, 10));
+    state.race = {
+      active: true,
+      code,
+      isHost,
+      myId,
+      seed: seed || null,
+      cols: dims ? dims.cols : null,
+      rows: dims ? dims.rows : null,
+      mazeReceived: !!isHost,
+      players: {},
+      channel: null
+    };
+    const channel = sb.channel(`race-${code}`, { config: { presence: { key: myId }, broadcast: { self: false } } });
+    state.race.channel = channel;
+
+    channel.on('broadcast', { event: 'request-info' }, () => {
+      if (state.race.code === code && state.race.isHost) broadcastRoomInfo();
+    });
+    channel.on('broadcast', { event: 'room-info' }, ({ payload }) => {
+      if (state.race.code !== code || state.race.mazeReceived || !payload) return;
+      state.race.mazeReceived = true;
+      state.race.seed = payload.seed;
+      state.race.cols = payload.cols;
+      state.race.rows = payload.rows;
+      applyRaceMaze(payload.cols, payload.rows, payload.seed);
+      updateRacePresence();
+      showRaceActiveUI(code, false);
+    });
+    channel.on('presence', { event: 'sync' }, syncRaceRosterFromPresence);
+    channel.on('presence', { event: 'join' }, () => {
+      syncRaceRosterFromPresence();
+      if (state.race.isHost) broadcastRoomInfo();
+    });
+    channel.on('presence', { event: 'leave' }, syncRaceRosterFromPresence);
+
+    return new Promise((resolve, reject) => {
+      channel.subscribe(async status => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            id: myId,
+            name: state.currentUser || 'Guest',
+            character: state.character,
+            x: 0, y: 0, moves: 0, finished: false, time: null,
+            host: isHost
+          }).catch(() => {});
+          if (!isHost) channel.send({ type: 'broadcast', event: 'request-info', payload: { from: myId } });
+          resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          reject(new Error('race channel ' + status));
+        }
+      });
+    });
+  }
+
+  async function hostRace() {
+    if (state.race.active) return;
+    const dims = SIZES[raceSizeSelect.value] || SIZES.medium;
+    const code = generateRaceCode();
+    const seed = stringToSeed('deep-delve-race|' + code);
+    applyRaceMaze(dims.cols, dims.rows, seed);
+    showRaceActiveUI(code, false);
+    try {
+      await connectRaceChannel(code, true, seed, dims);
+      updateRacePresence();
+    } catch (e) {
+      raceActiveNote.textContent = "Couldn't open the race room — check your connection and try again.";
+      raceActiveNote.className = 'field-note error';
+    }
+  }
+
+  async function joinRace(codeRaw) {
+    if (state.race.active) return;
+    const code = (codeRaw || '').trim().toUpperCase();
+    if (!code) {
+      raceSetupNote.textContent = 'Enter a race code first.';
+      raceSetupNote.className = 'field-note error';
+      return;
+    }
+    showRaceActiveUI(code, true);
+    try {
+      await connectRaceChannel(code, false, null, null);
+    } catch (e) {
+      raceActiveNote.textContent = "Couldn't connect — check the code and try again.";
+      raceActiveNote.className = 'field-note error';
+      return;
+    }
+    clearTimeout(raceJoinTimeout);
+    raceJoinTimeout = setTimeout(() => {
+      if (state.race.active && state.race.code === code && !state.race.mazeReceived) {
+        raceActiveNote.textContent = "No host found for that code yet — make sure they're still on the race screen.";
+        raceActiveNote.className = 'field-note error';
+      }
+    }, 8000);
+  }
+
+  document.getElementById('btnHostRace').addEventListener('click', hostRace);
+  document.getElementById('btnJoinRace').addEventListener('click', () => joinRace(raceCodeInput.value));
+  raceCodeInput.addEventListener('keydown', e => { if (e.key === 'Enter') joinRace(raceCodeInput.value); });
+  raceCodeInput.addEventListener('input', () => { raceCodeInput.value = raceCodeInput.value.toUpperCase(); });
+
+  document.getElementById('btnLeaveRace').addEventListener('click', () => {
+    leaveRaceInternal();
+    showRaceSetupUI();
+    draw();
+  });
+
+  document.getElementById('btnCopyRaceCode').addEventListener('click', async () => {
+    if (!state.race.code) return;
+    try {
+      await navigator.clipboard.writeText(state.race.code);
+      raceActiveNote.textContent = 'Code copied.';
+      raceActiveNote.className = 'field-note success';
+    } catch {
+      raceActiveNote.textContent = `Your code: ${state.race.code}`;
+      raceActiveNote.className = 'field-note';
+    }
+  });
+
+  document.getElementById('btnCopyRaceLink').addEventListener('click', async () => {
+    if (!state.race.code) return;
+    const link = generateRaceLink(state.race.code);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Deep Delve race', text: 'Race me through a maze, live!', url: link });
+        raceActiveNote.textContent = 'Sent!';
+        raceActiveNote.className = 'field-note success';
+        return;
+      } catch (e) { /* fall through to clipboard */ }
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      raceActiveNote.textContent = 'Link copied — send it to a friend.';
+      raceActiveNote.className = 'field-note success';
+    } catch {
+      raceActiveNote.textContent = link;
+      raceActiveNote.className = 'field-note';
+    }
+  });
+
   // ---------- Init ----------
   loadInitialTheme();
   buildThemeSelect();
@@ -6745,7 +7191,15 @@
   renderFlairs();
   cameFromChallenge = applyChallengeFromHash();
   if (!cameFromChallenge) {
+    cameFromRaceLink = checkRaceHash();
+    // A placeholder maze so the game screen has something to show while a
+    // race link's actual (host-defined) maze is still being fetched over
+    // the race channel — swapped out the moment room-info arrives.
     applyNewMaze(SIZES.medium.cols, SIZES.medium.rows, 'medium');
+    if (cameFromRaceLink) {
+      const tagline = document.querySelector('#screenSignIn .tagline');
+      if (tagline) tagline.textContent = "A friend is waiting to race you! Sign in or create an account to jump in.";
+    }
   } else {
     // Let them know why they're here before they sign in / create an
     // account — the actual maze is already loaded and waiting (see
