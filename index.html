@@ -5899,7 +5899,13 @@
       if (/already/i.test(error.message || '')) {
         return { ok: false, msg: 'That email is already connected to another account.' };
       }
-      return { ok: false, msg: "Couldn't connect that email — check your connection and try again." };
+      if (/rate limit|too many/i.test(error.message || '')) {
+        return { ok: false, msg: "Too many email attempts right now — Supabase's shared mailer is rate-limited on the free plan. Wait a bit and try again, or set up custom SMTP." };
+      }
+      // Surface Supabase's actual reason instead of a generic message —
+      // this is what actually distinguishes "rate limited" from "SMTP
+      // not configured" from anything else that can go wrong here.
+      return { ok: false, msg: error.message ? `Couldn't connect that email: ${error.message}` : "Couldn't connect that email — check your connection and try again." };
     }
     return { ok: true, msg: `Check ${newEmail} for a confirmation link — it won't take effect until you click it.` };
   }
