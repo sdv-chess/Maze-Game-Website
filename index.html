@@ -1244,6 +1244,7 @@
           <button class="secondary" id="btnSignIn">Sign in</button>
           <button class="primary" id="btnCreateAccount">Create account</button>
         </div>
+        <button type="button" id="btnForgotPassword" style="background:none; border:none; padding:0; margin:0; color:var(--teal); text-decoration:underline; cursor:pointer; font-family:var(--font-mono); font-size:11px; align-self:flex-start;">Forgot password?</button>
         <p class="field-note" id="accountNote">Your account syncs online — sign in from any device to pick up where you left off.</p>
       </div>
 
@@ -1256,6 +1257,18 @@
           <button class="secondary" id="btnSignOut" style="width:auto; padding:8px 10px;">Sign out</button>
         </div>
         <button class="primary" id="btnResumeMaze" style="display:none;">↩ Resume last maze</button>
+
+        <div class="stack-gap" style="border-top:1px solid var(--border); padding-top:10px; margin-top:2px;">
+          <div class="who" style="flex-direction:column; align-items:flex-start; gap:2px;">
+            <span>Recovery email</span>
+            <span class="sub" id="accEmailStatus">Checking…</span>
+          </div>
+          <div class="row-2">
+            <input type="email" class="field" id="accEmailInput" placeholder="you@example.com" autocomplete="off" />
+            <button class="secondary" id="btnConnectEmail" style="width:auto; white-space:nowrap;">Connect</button>
+          </div>
+          <p class="field-note" id="accEmailNote">Connect an email so you can reset your password if you ever forget it. You'll still sign in with your username as normal.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1827,6 +1840,44 @@
     </div>
     <div class="modal-actions">
       <button class="primary" id="btnFeedbackClose2">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="forgotPasswordOverlay">
+  <div class="modal help-modal">
+    <div class="help-header">
+      <h3>🔑 Reset your password</h3>
+      <button class="secondary" id="btnForgotPasswordClose" aria-label="Close">✕</button>
+    </div>
+    <div class="help-body">
+      <p class="field-note">Enter the email you connected to your account (in the Account card) and we'll send a link to set a new password. If you never connected an email, there's nothing to send it to — sign in with your username instead, or reach out via Feedback.</p>
+      <div class="stack-gap">
+        <input type="email" class="field" id="forgotEmailInput" placeholder="you@example.com" autocomplete="off" />
+        <button class="primary" id="btnSendResetLink">Send reset link</button>
+        <p class="field-note" id="forgotPasswordNote"></p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" id="btnForgotPasswordClose2">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="resetPasswordOverlay">
+  <div class="modal help-modal">
+    <div class="help-header">
+      <h3>🔑 Set a new password</h3>
+      <button class="secondary" id="btnResetPasswordClose" aria-label="Close">✕</button>
+    </div>
+    <div class="help-body">
+      <p class="field-note">You followed a password reset link. Choose a new password below — at least 6 characters.</p>
+      <div class="stack-gap">
+        <input type="password" class="field" id="resetPasswordInput" placeholder="New password" autocomplete="off" />
+        <input type="password" class="field" id="resetPasswordConfirm" placeholder="Confirm new password" autocomplete="off" />
+        <button class="primary" id="btnSetNewPassword">Set new password</button>
+        <p class="field-note" id="resetPasswordNote"></p>
+      </div>
     </div>
   </div>
 </div>
@@ -2645,6 +2696,20 @@
   const challengeNote = document.getElementById('challengeNote');
   const challengeBanner = document.getElementById('challengeBanner');
   const challengeBannerText = document.getElementById('challengeBannerText');
+  const accEmailInput = document.getElementById('accEmailInput');
+  const accEmailStatus = document.getElementById('accEmailStatus');
+  const accEmailNote = document.getElementById('accEmailNote');
+  const btnConnectEmail = document.getElementById('btnConnectEmail');
+  const btnForgotPassword = document.getElementById('btnForgotPassword');
+  const forgotPasswordOverlay = document.getElementById('forgotPasswordOverlay');
+  const forgotEmailInput = document.getElementById('forgotEmailInput');
+  const forgotPasswordNote = document.getElementById('forgotPasswordNote');
+  const btnSendResetLink = document.getElementById('btnSendResetLink');
+  const resetPasswordOverlay = document.getElementById('resetPasswordOverlay');
+  const resetPasswordInput = document.getElementById('resetPasswordInput');
+  const resetPasswordConfirm = document.getElementById('resetPasswordConfirm');
+  const resetPasswordNote = document.getElementById('resetPasswordNote');
+  const btnSetNewPassword = document.getElementById('btnSetNewPassword');
 
   // ---------- Elements: live race ----------
   const raceSizeSelect = document.getElementById('raceSizeSelect');
@@ -5773,13 +5838,90 @@
 
   async function signIn(username, password) {
     const key = username.toLowerCase();
-    const { error } = await sb.auth.signInWithPassword({
-      email: usernameToEmail(key),
-      password,
-    });
+    // Accounts sign in with username + password, which under the hood
+    // needs a real email for Supabase Auth. Normally that's the fake
+    // `username@deepdelve.local` pattern below, but once a player
+    // connects and confirms a real recovery email (see connectEmail()),
+    // Supabase's registered email for that account becomes the real
+    // one — so we ask the get_login_email RPC which email is currently
+    // on file and fall back to the fake pattern if the RPC isn't set up
+    // yet or nothing's been connected.
+    let email = usernameToEmail(key);
+    try {
+      const { data: loginEmail } = await sb.rpc('get_login_email', { p_username: key });
+      if (loginEmail) email = loginEmail;
+    } catch (e) { /* RPC not available yet — fine, use the fake pattern */ }
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
       return { ok: false, msg: 'Wrong username or password.' };
     }
+    return { ok: true };
+  }
+
+  // ---------- Recovery email + forgot password ----------
+  // A confirmed recovery email replaces the account's internal fake
+  // email as its actual Supabase Auth email (that's the only way
+  // Supabase's built-in password-reset mail actually gets delivered
+  // anywhere). signIn() above already knows how to find the right
+  // email for a username either way.
+  function isConnectedRealEmail(email, username) {
+    return !!email && email.toLowerCase() !== usernameToEmail(username).toLowerCase();
+  }
+
+  async function syncConnectedEmailStatus() {
+    if (!accEmailStatus || !state.currentUser) return;
+    accEmailStatus.textContent = 'Checking…';
+    let authEmail = null;
+    try {
+      const { data } = await sb.auth.getUser();
+      authEmail = data && data.user ? data.user.email : null;
+    } catch (e) { /* offline — leave status as-is below */ }
+    if (isConnectedRealEmail(authEmail, state.currentUser)) {
+      accEmailStatus.textContent = `Connected: ${authEmail}`;
+      if (accEmailInput) accEmailInput.value = authEmail;
+      // Best-effort mirror into the accounts table so get_login_email()
+      // can find it for future sign-ins from any device. Safe to retry —
+      // RLS only lets a signed-in user update their own row.
+      try {
+        await sb.from('accounts').update({ login_email: authEmail }).eq('username', state.currentUser);
+      } catch (e) { /* not fatal — status still shows correctly this session */ }
+    } else {
+      accEmailStatus.textContent = 'Not connected — add one so you can reset your password if you forget it.';
+    }
+  }
+
+  async function connectEmail(newEmail) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      return { ok: false, msg: 'Enter a valid email address.' };
+    }
+    const { error } = await sb.auth.updateUser({ email: newEmail });
+    if (error) {
+      if (/already/i.test(error.message || '')) {
+        return { ok: false, msg: 'That email is already connected to another account.' };
+      }
+      return { ok: false, msg: "Couldn't connect that email — check your connection and try again." };
+    }
+    return { ok: true, msg: `Check ${newEmail} for a confirmation link — it won't take effect until you click it.` };
+  }
+
+  async function requestPasswordReset(email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { ok: false, msg: 'Enter a valid email address.' };
+    }
+    try {
+      await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+    } catch (e) { /* fall through to the same generic message either way */ }
+    // Deliberately generic regardless of whether that email is on file,
+    // so this can't be used to check which emails have accounts.
+    return { ok: true, msg: "If that email is connected to an account, we've sent a reset link — check your inbox." };
+  }
+
+  async function finishPasswordReset(newPassword) {
+    if (!newPassword || newPassword.length < 6) {
+      return { ok: false, msg: 'Password must be at least 6 characters.' };
+    }
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+    if (error) return { ok: false, msg: "Couldn't set that password — try again." };
     return { ok: true };
   }
 
@@ -6075,6 +6217,7 @@
       accountLoggedIn.style.display = 'flex';
       accUsername.textContent = state.currentUser;
       renderAccountSummary();
+      syncConnectedEmailStatus();
       if (gameLogoutBtn) gameLogoutBtn.style.display = 'inline-block';
     } else {
       accountLoggedOut.style.display = 'flex';
@@ -6544,6 +6687,113 @@
     renderAchievements();
     renderFlairs();
     refreshThemeUnlocks();
+  });
+
+  // ---------- Recovery email + forgot password wiring ----------
+  btnConnectEmail.addEventListener('click', async () => {
+    const email = accEmailInput.value.trim();
+    if (!email) {
+      accEmailNote.textContent = 'Enter an email address first.';
+      accEmailNote.className = 'field-note error';
+      return;
+    }
+    btnConnectEmail.disabled = true;
+    accEmailNote.textContent = 'Connecting…';
+    accEmailNote.className = 'field-note';
+    const result = await connectEmail(email);
+    btnConnectEmail.disabled = false;
+    accEmailNote.textContent = result.msg;
+    accEmailNote.className = result.ok ? 'field-note success' : 'field-note error';
+  });
+
+  btnForgotPassword.addEventListener('click', () => {
+    forgotEmailInput.value = '';
+    forgotPasswordNote.textContent = '';
+    forgotPasswordNote.className = 'field-note';
+    forgotPasswordOverlay.classList.add('show');
+  });
+  document.getElementById('btnForgotPasswordClose').addEventListener('click', () => forgotPasswordOverlay.classList.remove('show'));
+  document.getElementById('btnForgotPasswordClose2').addEventListener('click', () => forgotPasswordOverlay.classList.remove('show'));
+
+  btnSendResetLink.addEventListener('click', async () => {
+    const email = forgotEmailInput.value.trim();
+    if (!email) {
+      forgotPasswordNote.textContent = 'Enter an email address first.';
+      forgotPasswordNote.className = 'field-note error';
+      return;
+    }
+    btnSendResetLink.disabled = true;
+    forgotPasswordNote.textContent = 'Sending…';
+    forgotPasswordNote.className = 'field-note';
+    const result = await requestPasswordReset(email);
+    btnSendResetLink.disabled = false;
+    forgotPasswordNote.textContent = result.msg;
+    forgotPasswordNote.className = result.ok ? 'field-note success' : 'field-note error';
+  });
+
+  document.getElementById('btnResetPasswordClose').addEventListener('click', () => resetPasswordOverlay.classList.remove('show'));
+
+  btnSetNewPassword.addEventListener('click', async () => {
+    const pw = resetPasswordInput.value;
+    const confirm = resetPasswordConfirm.value;
+    if (pw !== confirm) {
+      resetPasswordNote.textContent = "Passwords don't match.";
+      resetPasswordNote.className = 'field-note error';
+      return;
+    }
+    btnSetNewPassword.disabled = true;
+    resetPasswordNote.textContent = 'Setting password…';
+    resetPasswordNote.className = 'field-note';
+    const result = await finishPasswordReset(pw);
+    btnSetNewPassword.disabled = false;
+    if (result.ok) {
+      resetPasswordNote.textContent = 'Password updated — signing you in…';
+      resetPasswordNote.className = 'field-note success';
+      resetPasswordInput.value = '';
+      resetPasswordConfirm.value = '';
+      // The recovery link already left us with an active session for
+      // this account — reuse the same lookup restoreSessionOnLoad()
+      // does to sign the player into the app itself, same as a normal
+      // sign-in, rather than making them type their username again.
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session && session.user) {
+          const { data } = await sb
+            .from('accounts')
+            .select('username, solved_records, equipped_flair, in_progress_maze')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          if (data) {
+            state.currentUser = data.username;
+            state.solvedRecords = data.solved_records || [];
+            state.equippedFlair = data.equipped_flair || null;
+            state.inProgressMaze = data.in_progress_maze || null;
+            renderAccountUI();
+            renderResumeMazeButton();
+            renderAchievements();
+            renderFlairs();
+            refreshThemeUnlocks();
+          }
+        }
+      } catch (e) { /* they can still sign in manually if this lookup fails */ }
+      setTimeout(() => resetPasswordOverlay.classList.remove('show'), 1200);
+    } else {
+      resetPasswordNote.textContent = result.msg;
+      resetPasswordNote.className = 'field-note error';
+    }
+  });
+
+  // Supabase puts an authenticated-but-unconfirmed session in place the
+  // moment someone lands here from a password-reset email, and fires
+  // this event so we can prompt for the new password.
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      resetPasswordInput.value = '';
+      resetPasswordConfirm.value = '';
+      resetPasswordNote.textContent = '';
+      resetPasswordNote.className = 'field-note';
+      resetPasswordOverlay.classList.add('show');
+    }
   });
 
   document.getElementById('btnResumeMaze').addEventListener('click', () => {
