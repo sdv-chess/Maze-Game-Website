@@ -5894,7 +5894,15 @@
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
       return { ok: false, msg: 'Enter a valid email address.' };
     }
-    const { error } = await sb.auth.updateUser({ email: newEmail });
+    // Without an explicit emailRedirectTo, Supabase falls back to the
+    // dashboard's Site URL setting — which is easy to leave on its
+    // localhost:3000 default and never notice, since the email itself
+    // still sends fine. Pointing this at window.location explicitly
+    // means it works regardless of what that dashboard field says.
+    const { error } = await sb.auth.updateUser(
+      { email: newEmail },
+      { emailRedirectTo: window.location.origin + window.location.pathname }
+    );
     if (error) {
       if (/already/i.test(error.message || '')) {
         return { ok: false, msg: 'That email is already connected to another account.' };
