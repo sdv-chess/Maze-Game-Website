@@ -17,6 +17,7 @@ Deep Delve is a browser-based maze game with no backtracking — you get a limit
 - **Sprint & Marathon modes** — an 8×8 maze against a 1-minute clock, or a sprawling 60×60 grind
 - **Daily Maze** — one shared maze per day, seeded from the date so everyone gets the exact same layout, with a **leaderboard** ranking today's fastest signed-in solvers
 - **Fog of war** — optional setting that only lights the cave near your character, leaving the rest dark until explored
+- **Friends** — add other players by username, accept or decline requests, and race a friend straight from your friends list; a request, acceptance, or race invite shows up as a live toast if they're online
 - **Challenge a friend** — pack your current maze (layout + settings, no progress) into a shareable link; whoever opens it drops straight into the same maze
 - **Replay & practice** — step or play back any solved run, then click into the maze to practice from any point, separate from your recorded path
 - **Accounts & progress** — sign in to save solve history (grouped by maze category), resume mazes in progress, and sync across devices
@@ -28,7 +29,7 @@ Deep Delve is a browser-based maze game with no backtracking — you get a limit
 
 - Vanilla HTML, CSS, and JavaScript — no build step, no framework
 - HTML5 Canvas for maze rendering and animation
-- [Supabase](https://supabase.com) for authentication and storing accounts, solve history, and progress
+- [Supabase](https://supabase.com) for authentication and storing accounts, solve history, progress, and friendships
 - Deployed via **GitHub Pages**
 
 ## Running locally
@@ -50,11 +51,14 @@ Account features (sign-in, saved progress, badges) require a connected Supabase 
 
 The Daily Maze leaderboard reads from a separate `daily_scores` table (kept apart from the private `accounts` table since a leaderboard needs to read everyone's scores, not just your own). Run [`daily_leaderboard_setup.sql`](./daily_leaderboard_setup.sql) once in your Supabase project's SQL editor to create it before the leaderboard will work.
 
+Friends similarly live in their own `friendships` table (a friendship involves two players, so it needs to be readable/writable by either side, unlike a private `accounts` row). Run [`friends_setup.sql`](./friends_setup.sql) once in your Supabase project's SQL editor to create it before the Friends screen will work.
+
 ## Project structure
 
 ```
 index.html                     # the entire app — markup, styles, and game logic
 daily_leaderboard_setup.sql    # one-time Supabase setup for the Daily Maze leaderboard
+friends_setup.sql              # one-time Supabase setup for the Friends feature
 ```
 
 ## Feedback
@@ -63,4 +67,4 @@ There's a feedback form built into the app (Feedback screen), or you can reach o
 
 ## License
 
-No license has been specified yet — all rights reserved by default. 
+No license has been specified yet — all rights reserved by default.
