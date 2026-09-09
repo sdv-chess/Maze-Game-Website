@@ -1315,6 +1315,7 @@
           </div>
           <button class="secondary" id="btnSignOut" style="width:auto; padding:8px 10px;">Sign out</button>
         </div>
+        <button class="secondary" id="btnAccountBackToMode">← Back to menu</button>
         <button class="primary" id="btnResumeMaze" style="display:none;">↩ Resume last maze</button>
 
         <div class="stack-gap" style="border-top:1px solid var(--border); padding-top:10px; margin-top:2px;">
@@ -1460,7 +1461,10 @@
         <h1><span class="dot"></span>Deep Delve</h1>
         <p class="tagline">Pick a size, an explorer, and a theme — then head into the cave.</p>
       </div>
-      <button class="secondary" id="btnSetupToAccount" style="width:auto; padding:8px 14px; align-self:flex-start;">⚙️ Account</button>
+      <div style="display:flex; gap:8px; align-self:flex-start;">
+        <button class="secondary" id="btnSetupBackToMode" style="width:auto; padding:8px 14px;">← Back</button>
+        <button class="secondary" id="btnSetupToAccount" style="width:auto; padding:8px 14px;">⚙️ Account</button>
+      </div>
     </header>
 
     <div class="panel" id="setupPanel">
@@ -7682,6 +7686,7 @@
   }
 
   document.getElementById('btnSetupToAccount').addEventListener('click', () => showScreen('signin'));
+  document.getElementById('btnSetupBackToMode').addEventListener('click', () => showScreen('mode'));
   document.getElementById('btnSetupNext').addEventListener('click', () => showScreen('game'));
   document.getElementById('btnGoSetup').addEventListener('click', () => showScreen('setup'));
   btnGoMultiplayer.addEventListener('click', () => {
@@ -7698,6 +7703,7 @@
     }
   });
   document.getElementById('btnModeToAccount').addEventListener('click', () => showScreen('signin'));
+  document.getElementById('btnAccountBackToMode').addEventListener('click', () => showScreen('mode'));
   document.getElementById('btnModeSingle').addEventListener('click', () => showScreen('setup'));
   document.getElementById('btnModeMulti').addEventListener('click', () => showScreen('multiplayer'));
   document.getElementById('btnMultiBack').addEventListener('click', () => showScreen('mode'));
