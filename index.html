@@ -6116,13 +6116,23 @@
       return { ok: false, msg: friendsData.friends.some(f => f.username === target)
         ? "You're already friends." : 'A request is already pending with them.' };
     }
-    const acc = await getAccount(target);
-    if (!acc) return { ok: false, msg: 'No account with that username.' };
+    // No pre-check against the accounts table here on purpose: RLS on
+    // `accounts` normally only lets a signed-in player read their own row,
+    // so looking up someone else's username before inserting would fail
+    // even for real accounts. Instead we just attempt the insert and let
+    // the `friendships.recipient` foreign key (which references
+    // accounts.username) tell us whether the account is real — Postgres
+    // foreign-key checks aren't subject to the referenced table's RLS, so
+    // this works regardless of what the accounts SELECT policy allows.
     const { error } = await sb.from('friendships').insert({ requester: me, recipient: target, status: 'pending' });
-    if (error) return { ok: false, msg: "Couldn't send that request — try again." };
+    if (error) {
+      if (error.code === '23503') return { ok: false, msg: 'No account with that username.' };
+      if (error.code === '23505') return { ok: false, msg: 'A request is already pending with them.' };
+      return { ok: false, msg: "Couldn't send that request — try again." };
+    }
     sendInboxMessage(target, 'friend-request', { from: state.currentUser });
     await loadFriendsData();
-    return { ok: true, msg: `Friend request sent to ${acc.username}.` };
+    return { ok: true, msg: `Friend request sent to ${target}.` };
   }
 
   async function acceptFriendRequest(row) {
