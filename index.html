@@ -217,6 +217,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text);
+    font-family: var(--font-mono);
     font-size: 16px;
     cursor: pointer;
     display: flex;
@@ -374,7 +375,7 @@
   .friend-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
   .friend-toast-text { font-size: 12px; color: var(--text); max-width: 260px; }
   .friend-toast button { width: auto; padding: 6px 10px; font-size: 11px; flex: 0 0 auto; }
-  .friend-toast .ft-dismiss { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 15px; padding: 0 2px; }
+  .friend-toast .ft-dismiss { background: none; border: none; color: var(--text-faint); cursor: pointer; font-family: var(--font-mono); font-size: 15px; padding: 0 2px; }
   .history-item {
     display: flex;
     flex-direction: column;
@@ -447,6 +448,11 @@
   }
   .file-btn:hover { background: var(--stone-light); }
   input[type="file"] { display: none; }
+  /* #btnUseUrl has no class of its own (unlike every other button in the
+     app, which is styled via .primary/.secondary/.file-btn/etc.), so it
+     silently fell back to the browser's default UI font instead of the
+     app's mono. */
+  #btnUseUrl { font-family: var(--font-mono); }
 
   .url-row { display: flex; gap: 6px; }
   .url-row input { flex: 1; min-width: 0; }
@@ -975,7 +981,7 @@
   .help-cat-header:hover { background: var(--stone-light); }
   .help-cat-header .help-cat-emoji { font-size: 17px; flex: none; }
   .help-cat-header .help-cat-title { flex: 1; font-size: 13.5px; letter-spacing: 0.02em; }
-  .help-cat-header .help-cat-sub { display: block; font-size: 10.5px; color: var(--text-faint); font-family: var(--font-body, inherit); margin-top: 2px; letter-spacing: normal; text-transform: none; }
+  .help-cat-header .help-cat-sub { display: block; font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); margin-top: 2px; letter-spacing: normal; text-transform: none; }
   .help-cat-header .help-cat-arrow { flex: none; font-size: 12px; color: var(--text-faint); transition: transform 0.2s ease; }
   .help-cat.open .help-cat-header .help-cat-arrow { transform: rotate(90deg); }
   .help-cat-body { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
@@ -1082,7 +1088,7 @@
   .modal.insights-modal { max-width: 540px; }
   .insight-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 18px; }
   .insight-stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px; text-align: center; }
-  .insight-stat .num { font-family: var(--font-display); font-size: 21px; font-weight: 700; color: var(--teal); line-height: 1.2; }
+  .insight-stat .num { font-family: var(--font-mono); font-size: 21px; font-weight: 700; color: var(--teal); line-height: 1.2; }
   .insight-stat .lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px; }
   .insight-section-title {
     font-family: var(--font-display);
