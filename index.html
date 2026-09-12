@@ -5513,7 +5513,8 @@
       const matchedPreset = Object.keys(SIZES).find(k => SIZES[k].cols === data.c && SIZES[k].rows === data.r);
       if (data.sk === 'level') {
         state.sizeKey = 'level';
-        state.level = data.lv || 1;
+        // Clamp in case this payload predates MAX_LEVEL or was hand-edited.
+        state.level = Math.min(MAX_LEVEL, Math.max(1, data.lv || 1));
       } else {
         state.sizeKey = data.sk === 'custom' ? 'custom' : (matchedPreset || 'custom');
       }
