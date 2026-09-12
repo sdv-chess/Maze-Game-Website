@@ -1038,6 +1038,30 @@
   .lb-clean { flex: none; font-size: 12px; }
   .lb-empty { font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 18px 0; }
   .lb-own-rank { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 12px; color: var(--text-muted); text-align: center; }
+
+  /* Live-race voice chat */
+  .lb-mic { flex: none; font-size: 12px; width: 16px; text-align: center; opacity: 0.85; transition: transform 0.1s; }
+  .lb-mic.muted { opacity: 0.4; }
+  .lb-row.speaking { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset, 0 0 8px rgba(58,219,196,0.35); }
+  .lb-row.speaking .lb-mic { transform: scale(1.25); }
+
+  .voice-row { display: flex; gap: 8px; }
+  .voice-row button { flex: 1; }
+  button.voice-toggle.on {
+    background: rgba(58,219,196,0.14);
+    border-color: var(--teal);
+    color: var(--teal);
+  }
+  button.voice-toggle.on.live { animation: voicePulse 1.6s ease-in-out infinite; }
+  @keyframes voicePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(58,219,196,0.35); }
+    50% { box-shadow: 0 0 0 5px rgba(58,219,196,0); }
+  }
+  button.mute-toggle.muted {
+    background: rgba(255,107,107,0.14);
+    border-color: var(--coral);
+    color: var(--coral);
+  }
   .lb-champion-banner {
     display: flex;
     align-items: center;
@@ -1704,6 +1728,11 @@
             <button class="secondary" id="btnCopyRaceLink">🔗 Copy link</button>
           </div>
           <div id="raceRoster"><p class="lb-empty">Waiting for racers…</p></div>
+          <div class="voice-row">
+            <button class="secondary voice-toggle" id="btnToggleVoice">🎤 Join voice chat</button>
+            <button class="secondary mute-toggle" id="btnToggleMute" style="display:none;">🔊 Mute</button>
+          </div>
+          <p class="field-note" id="voiceNote"></p>
           <p class="field-note" id="raceActiveNote"></p>
           <button class="secondary" id="btnLeaveRace">🚪 Leave race</button>
         </div>
@@ -2742,6 +2771,27 @@
   // connecting phase.
   let raceUIActive = false;
 
+  // ---------- Live race: voice chat ----------
+  // Peer-to-peer mic audio over WebRTC between everyone in the same race
+  // room, signaled through the same Supabase Realtime channel used for
+  // positions (broadcast event 'voice-signal', targeted by id). No media
+  // server is involved — audio flows directly between browsers, so it only
+  // works while the race channel itself is connected and stops the moment
+  // either side leaves.
+  const voiceChat = {
+    active: false,      // local mic joined?
+    muted: false,       // local mic joined but silenced?
+    localStream: null,
+    audioCtx: null,
+    localAnalyser: null,
+    peers: {},           // peerId -> { pc, audioEl, analyser, dataArr, makingOffer, pendingCandidates }
+    speaking: {},         // peerId -> bool, plus 'me' for local
+    rafId: null
+  };
+  const VOICE_ICE_SERVERS = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+  ];
+
   // ---------- Elements ----------
   const canvas = document.getElementById('mazeCanvas');
   const ctx = canvas.getContext('2d');
@@ -2887,6 +2937,9 @@
   const raceActiveNote = document.getElementById('raceActiveNote');
   const raceCodeDisplay = document.getElementById('raceCodeDisplay');
   const raceRosterEl = document.getElementById('raceRoster');
+  const btnToggleVoice = document.getElementById('btnToggleVoice');
+  const btnToggleMute = document.getElementById('btnToggleMute');
+  const voiceNote = document.getElementById('voiceNote');
   // Shows the width/height fields only when "Custom" is picked, same
   // pattern as the single-player custom size panel.
   function syncRaceCustomPanel() {
@@ -7967,7 +8020,9 @@
       y: state.player.y,
       moves: state.moves,
       finished: false,
-      time: null
+      time: null,
+      voice: voiceChat.active,
+      muted: voiceChat.muted
     }, extra || {});
     state.race.channel.track(payload).catch(() => {});
   }
@@ -7982,6 +8037,7 @@
     });
     state.race.players = players;
     renderRaceRoster();
+    syncVoicePeers();
     draw();
   }
 
@@ -8002,16 +8058,272 @@
       const chr = CHARACTERS.find(c => c.id === p.character) || CHARACTERS[0];
       const glyph = chr.id === 'custom' ? '🖼️' : chr.emoji;
       const status = p.finished ? `🏁 ${formatLbTime(p.time || 0)}` : `${p.moves || 0} moves`;
+      // For our own row, reflect local mic state directly rather than
+      // waiting on a presence round-trip, so the icon updates the instant
+      // you tap Join/Mute instead of a beat later.
+      const onVoice = isMe ? voiceChat.active : !!p.voice;
+      const onMuted = isMe ? voiceChat.muted : !!p.muted;
+      const micGlyph = onVoice ? (onMuted ? '🔇' : '🎙️') : '';
       html += `
-        <div class="lb-row rank-${rank}${isMe ? ' me' : ''}">
+        <div class="lb-row rank-${rank}${isMe ? ' me' : ''}" data-pid="${escapeHtml(p.id || '')}">
           <span class="lb-rank">${rank <= 3 && p.finished ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
           <span class="lb-name">${glyph} ${escapeHtml(p.name || 'Guest')}</span>
+          ${micGlyph ? `<span class="lb-mic${onMuted ? ' muted' : ''}" data-mic="${escapeHtml(p.id || '')}">${micGlyph}</span>` : ''}
           <span class="lb-stats">${status}</span>
         </div>`;
     });
     html += '</div>';
     raceRosterEl.innerHTML = html;
   }
+
+  // ---- Voice chat: signaling helpers ----
+  function sendVoiceSignal(toId, type, data) {
+    if (!state.race.channel) return;
+    state.race.channel.send({
+      type: 'broadcast',
+      event: 'voice-signal',
+      payload: Object.assign({ from: state.race.myId, to: toId, kind: type }, data || {})
+    });
+  }
+
+  function syncVoiceButtons() {
+    if (!btnToggleVoice) return;
+    btnToggleVoice.textContent = voiceChat.active ? '🎤 Leave voice chat' : '🎤 Join voice chat';
+    btnToggleVoice.classList.toggle('on', voiceChat.active);
+    btnToggleVoice.classList.toggle('live', voiceChat.active && !voiceChat.muted);
+    if (btnToggleMute) {
+      btnToggleMute.style.display = voiceChat.active ? '' : 'none';
+      btnToggleMute.textContent = voiceChat.muted ? '🔇 Unmute' : '🔊 Mute';
+      btnToggleMute.classList.toggle('muted', voiceChat.muted);
+    }
+  }
+
+  async function joinVoiceChat() {
+    if (voiceChat.active || !state.race.active) return;
+    voiceNote.textContent = 'Requesting microphone…';
+    voiceNote.className = 'field-note';
+    try {
+      voiceChat.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (e) {
+      voiceNote.textContent = "Couldn't access your microphone — check your browser's permission for this site.";
+      voiceNote.className = 'field-note error';
+      return;
+    }
+    voiceChat.active = true;
+    voiceChat.muted = false;
+    try {
+      voiceChat.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      voiceChat.localAnalyser = setupAnalyser(voiceChat.audioCtx, voiceChat.localStream);
+    } catch (e) { /* speaking indicator is cosmetic only */ }
+    voiceNote.textContent = 'Voice chat on — connecting to racers…';
+    voiceNote.className = 'field-note success';
+    syncVoiceButtons();
+    renderRaceRoster();
+    updateRacePresence();
+    syncVoicePeers();
+    startSpeakingLoop();
+  }
+
+  function leaveVoiceChat() {
+    stopSpeakingLoop();
+    Object.keys(voiceChat.peers).forEach(closeVoicePeer);
+    if (voiceChat.localStream) {
+      voiceChat.localStream.getTracks().forEach(t => t.stop());
+      voiceChat.localStream = null;
+    }
+    if (voiceChat.audioCtx) {
+      try { voiceChat.audioCtx.close(); } catch (e) { /* already closed */ }
+      voiceChat.audioCtx = null;
+    }
+    voiceChat.localAnalyser = null;
+    voiceChat.speaking = {};
+    const wasActive = voiceChat.active;
+    voiceChat.active = false;
+    voiceChat.muted = false;
+    syncVoiceButtons();
+    if (voiceNote) { voiceNote.textContent = ''; voiceNote.className = 'field-note'; }
+    if (state.race.active) renderRaceRoster();
+    updateRoomSpeakingClasses();
+    if (wasActive) { updateRacePresence(); }
+  }
+
+  function toggleVoiceMute() {
+    if (!voiceChat.active || !voiceChat.localStream) return;
+    voiceChat.muted = !voiceChat.muted;
+    voiceChat.localStream.getAudioTracks().forEach(t => { t.enabled = !voiceChat.muted; });
+    syncVoiceButtons();
+    renderRaceRoster();
+    updateRacePresence();
+  }
+
+  // Reconciles who we should have a live WebRTC connection to, based on
+  // the current race roster's `voice` flag in presence. Runs after every
+  // presence sync, so it naturally picks up someone turning their mic on
+  // after we've already joined, and tears a peer down the moment they
+  // turn theirs off or leave the race. To avoid both sides racing to
+  // offer at once, only the side with the lexicographically smaller id
+  // initiates — the other side just waits for that offer.
+  function syncVoicePeers() {
+    if (!state.race.active) return;
+    const myId = state.race.myId;
+    const players = state.race.players || {};
+    if (voiceChat.active) {
+      Object.keys(players).forEach(pid => {
+        if (pid === myId) return;
+        const p = players[pid];
+        if (p && p.voice && !voiceChat.peers[pid]) {
+          if (myId < pid) createVoicePeer(pid, true);
+        }
+      });
+    }
+    Object.keys(voiceChat.peers).forEach(pid => {
+      const p = players[pid];
+      if (!p || !p.voice || !voiceChat.active) closeVoicePeer(pid);
+    });
+  }
+
+  function createVoicePeer(peerId, isInitiator) {
+    if (voiceChat.peers[peerId]) return voiceChat.peers[peerId];
+    const pc = new RTCPeerConnection({ iceServers: VOICE_ICE_SERVERS });
+    const entry = { pc, audioEl: null, analyser: null, pendingCandidates: [], remoteSet: false };
+    voiceChat.peers[peerId] = entry;
+
+    if (voiceChat.localStream) {
+      voiceChat.localStream.getTracks().forEach(track => pc.addTrack(track, voiceChat.localStream));
+    }
+    pc.onicecandidate = e => { if (e.candidate) sendVoiceSignal(peerId, 'ice', { candidate: e.candidate }); };
+    pc.ontrack = e => {
+      const stream = e.streams[0];
+      let audioEl = entry.audioEl;
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.autoplay = true;
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+        entry.audioEl = audioEl;
+      }
+      audioEl.srcObject = stream;
+      if (voiceChat.audioCtx) {
+        try { entry.analyser = setupAnalyser(voiceChat.audioCtx, stream); } catch (err) { /* cosmetic only */ }
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) closeVoicePeer(peerId);
+    };
+
+    if (isInitiator) {
+      pc.onnegotiationneeded = async () => {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          sendVoiceSignal(peerId, 'offer', { sdp: pc.localDescription });
+        } catch (e) { /* ignore — a retry will come on the next sync */ }
+      };
+    }
+    return entry;
+  }
+
+  async function handleVoiceSignal(payload) {
+    const peerId = payload.from;
+    if (!peerId) return;
+    if (payload.kind === 'offer') {
+      if (!voiceChat.active) return; // not in voice chat — ignore invites
+      const entry = createVoicePeer(peerId, false);
+      try {
+        await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        entry.remoteSet = true;
+        (entry.pendingCandidates || []).forEach(c => entry.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+        entry.pendingCandidates = [];
+        const answer = await entry.pc.createAnswer();
+        await entry.pc.setLocalDescription(answer);
+        sendVoiceSignal(peerId, 'answer', { sdp: entry.pc.localDescription });
+      } catch (e) { /* connection will simply not come up with this peer */ }
+    } else if (payload.kind === 'answer') {
+      const entry = voiceChat.peers[peerId];
+      if (!entry) return;
+      try {
+        await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        entry.remoteSet = true;
+        (entry.pendingCandidates || []).forEach(c => entry.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+        entry.pendingCandidates = [];
+      } catch (e) { /* ignore */ }
+    } else if (payload.kind === 'ice') {
+      const entry = voiceChat.peers[peerId];
+      if (!entry || !payload.candidate) return;
+      if (entry.remoteSet) {
+        entry.pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+      } else {
+        entry.pendingCandidates.push(payload.candidate);
+      }
+    }
+  }
+
+  function closeVoicePeer(peerId) {
+    const entry = voiceChat.peers[peerId];
+    if (!entry) return;
+    try { entry.pc.close(); } catch (e) { /* already closed */ }
+    if (entry.audioEl) {
+      try { entry.audioEl.srcObject = null; entry.audioEl.remove(); } catch (e) { /* already gone */ }
+    }
+    delete voiceChat.peers[peerId];
+    delete voiceChat.speaking[peerId];
+    updateRoomSpeakingClasses();
+  }
+
+  // ---- Voice chat: "who's talking" indicator ----
+  // Cosmetic only — a simple volume-above-threshold check per stream,
+  // reflected as a glow on that racer's roster row. Never gates audio.
+  function setupAnalyser(ctx, stream) {
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.6;
+    source.connect(analyser);
+    return { analyser, data: new Uint8Array(analyser.frequencyBinCount) };
+  }
+
+  function isSpeaking(a) {
+    if (!a) return false;
+    a.analyser.getByteTimeDomainData(a.data);
+    let sum = 0;
+    for (let i = 0; i < a.data.length; i++) { const v = a.data[i] - 128; sum += v * v; }
+    const rms = Math.sqrt(sum / a.data.length);
+    return rms > 6; // low-ish threshold — mic sensitivity varies a lot
+  }
+
+  function updateRoomSpeakingClasses() {
+    if (!raceRosterEl) return;
+    raceRosterEl.querySelectorAll('.lb-row[data-pid]').forEach(row => {
+      const pid = row.getAttribute('data-pid');
+      const speaking = pid === state.race.myId ? !!voiceChat.speaking.me : !!voiceChat.speaking[pid];
+      row.classList.toggle('speaking', !!speaking && voiceChat.active);
+    });
+  }
+
+  function startSpeakingLoop() {
+    if (voiceChat.rafId) return;
+    const tick = () => {
+      if (!voiceChat.active) { voiceChat.rafId = null; return; }
+      voiceChat.speaking.me = !voiceChat.muted && isSpeaking(voiceChat.localAnalyser);
+      Object.keys(voiceChat.peers).forEach(pid => {
+        voiceChat.speaking[pid] = isSpeaking(voiceChat.peers[pid].analyser);
+      });
+      updateRoomSpeakingClasses();
+      voiceChat.rafId = requestAnimationFrame(tick);
+    };
+    voiceChat.rafId = requestAnimationFrame(tick);
+  }
+
+  function stopSpeakingLoop() {
+    if (voiceChat.rafId) { cancelAnimationFrame(voiceChat.rafId); voiceChat.rafId = null; }
+  }
+
+  if (btnToggleVoice) {
+    btnToggleVoice.addEventListener('click', () => {
+      if (voiceChat.active) leaveVoiceChat(); else joinVoiceChat();
+    });
+  }
+  if (btnToggleMute) btnToggleMute.addEventListener('click', toggleVoiceMute);
 
   function broadcastRoomInfo() {
     if (!state.race.channel || !state.race.isHost) return;
@@ -8025,6 +8337,7 @@
   let raceReconnectTimer = null;
 
   function leaveRaceInternal() {
+    leaveVoiceChat();
     if (state.race.channel) {
       try { state.race.channel.unsubscribe(); } catch (e) { /* already gone */ }
     }
@@ -8054,7 +8367,9 @@
       moves: state.moves,
       finished: false,
       time: null,
-      host: isHost
+      host: isHost,
+      voice: voiceChat.active,
+      muted: voiceChat.muted
     }, extra || {});
   }
 
@@ -8099,7 +8414,14 @@
       syncRaceRosterFromPresence();
       if (state.race.isHost) broadcastRoomInfo();
     });
-    channel.on('presence', { event: 'leave' }, syncRaceRosterFromPresence);
+    channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
+      syncRaceRosterFromPresence();
+      (leftPresences || []).forEach(p => { if (p && p.id) closeVoicePeer(p.id); });
+    });
+    channel.on('broadcast', { event: 'voice-signal' }, ({ payload }) => {
+      if (!payload || payload.to !== myId) return;
+      handleVoiceSignal(payload);
+    });
 
     return new Promise((resolve, reject) => {
       let settled = false;
