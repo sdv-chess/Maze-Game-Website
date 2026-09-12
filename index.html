@@ -38,7 +38,21 @@
     padding: 28px 16px 60px;
   }
 
+  /* Base (mobile/tablet) width. Screens that need to stay narrow (sign-in,
+     setup, etc.) set their own inline max-width on this same class, and an
+     inline style always wins over these rules — so only the wrap with no
+     inline override (the main game screen) actually grows on wide viewports. */
   .wrap { max-width: 900px; margin: 0 auto; }
+
+  @media (min-width: 1100px) {
+    .wrap { max-width: min(94vw, 1180px); }
+  }
+  @media (min-width: 1440px) {
+    .wrap { max-width: min(88vw, 1440px); }
+  }
+  @media (min-width: 1920px) {
+    .wrap { max-width: 1600px; }
+  }
 
   header {
     display: flex;
@@ -135,6 +149,16 @@
   }
 
   @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+
+  /* On laptop/desktop-sized viewports the .wrap above grows, so widen the
+     side column and gap to match instead of just adding blank space around
+     the (width-capped) maze in the left column. */
+  @media (min-width: 1100px) {
+    .layout { grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; }
+  }
+  @media (min-width: 1440px) {
+    .layout { grid-template-columns: minmax(0, 1fr) 360px; gap: 30px; }
+  }
 
   .maze-panel {
     position: relative;
@@ -4534,7 +4558,12 @@
 
   function resizeCanvas() {
     const panel = mazeScroll.parentElement;
-    const availableW = Math.min(panel.clientWidth - 4, 560);
+    // The width cap scales up on wider viewports so the maze itself grows on
+    // desktop/laptop screens instead of just sitting in a wider panel with
+    // more empty space around it. On narrow (mobile) viewports panel.clientWidth
+    // is already well under 560, so this never affects the mobile layout.
+    const widthCap = window.innerWidth >= 1440 ? 900 : window.innerWidth >= 1100 ? 720 : 560;
+    const availableW = Math.min(panel.clientWidth - 4, widthCap);
     const availableH = Math.max(220, window.innerHeight * 0.68);
     // Fit both dimensions, not just width — small/medium/large presets are
     // sized to always land inside this box, so they never need scrolling.
