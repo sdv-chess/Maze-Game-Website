@@ -2451,7 +2451,7 @@
       canvas: { mazeBg: '#103038', wall: '#1F5A63', border: '#2C7580', trailRgb: '45,226,196', torchRgb: '79,214,255', finishEmoji: '🪸', fallEmoji: '🫧', fallLabel: 'Swept into the deep' }
     },
     {
-      id: 'astral_ascension', name: 'Astral Ascension', emoji: '🌠', unlockLevel: 300,
+      id: 'astral_ascension', name: 'Astral Ascension', emoji: '🌠', unlockLevel: MAX_LEVEL,
       vars: {
         '--bg': '#0A0A12', '--panel': '#14131F', '--panel-2': '#1A1929',
         '--stone': '#242238', '--stone-light': '#322F4D', '--border': '#322F4D',
@@ -2558,7 +2558,11 @@
     { level: 10,  id: 'level_10',  name: 'Deep Descent',      icon: '⛏️', rank: 'silver'   },
     { level: 25,  id: 'level_25',  name: 'Abyss Walker',      icon: '🕳️', rank: 'silver'   },
     { level: 50,  id: 'level_50',  name: 'Level Master',      icon: '👑', rank: 'gold'     },
-    { level: 100, id: 'level_100', name: 'Centennial Delver', icon: '🏔️', rank: 'platinum' }
+    { level: 100, id: 'level_100', name: 'Centennial Delver', icon: '🏔️', rank: 'platinum' },
+    { level: 200, id: 'level_200', name: 'Abyssal Delver',    icon: '🪸', rank: 'diamond'  },
+    // Tied to MAX_LEVEL so this always sits at the actual cap, whatever it's set to —
+    // the same moment that unlocks the Astral Ascension theme (see THEMES above).
+    { level: MAX_LEVEL, id: 'level_max', name: 'Ascendant', icon: '🌠', rank: 'diamond' }
   ];
   LEVEL_TIERS.forEach(t => {
     BADGES.push({
