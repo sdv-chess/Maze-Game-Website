@@ -606,6 +606,7 @@
   .level-num { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--gold); }
   .level-dims { font-size: 11.5px; color: var(--text-muted); }
 
+  .max-level-note { color: var(--gold); font-weight: 600; }
   .level-progress { margin: 2px 0 4px; }
   .level-progress-label {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -884,6 +885,7 @@
   .modal p { color: var(--text-muted); font-size: 13px; margin: 0 0 12px; }
   .modal .badge-alert { color: var(--gold); font-size: 12.5px; margin: 0 0 16px; }
   .modal .win-celebrate { color: var(--teal); font-size: 12.5px; margin: 0 0 16px; font-weight: 600; }
+  .modal .max-level-alert { color: var(--gold); font-size: 13px; margin: 0 0 16px; font-weight: 700; }
   .modal .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .modal .modal-actions button { flex: 1; min-width: 100px; }
 
@@ -1556,6 +1558,7 @@
             <span class="level-num" id="levelNum">Level 1</span>
             <span class="level-dims" id="levelDims">5 × 5 cells</span>
           </div>
+          <p class="field-note max-level-note" id="maxLevelNote" style="display:none;">🏆 You've hit the max level — difficulty stops climbing from here.</p>
           <div class="level-progress" id="levelProgressWrap">
             <div class="level-progress-label">
               <span>Levels cleared</span>
@@ -2040,6 +2043,7 @@
     <p id="winStats">Moves: 0 · Time: 00:00</p>
     <p class="win-celebrate" id="winCelebrate" style="display:none;"></p>
     <p class="badge-alert" id="winBadgeAlert" style="display:none;"></p>
+    <p class="max-level-alert" id="winMaxLevel" style="display:none;">🏆 Max level reached — you've conquered every level up to the cap!</p>
     <div class="modal-actions">
       <button class="secondary" id="btnWinShare">📤 Share</button>
       <button class="secondary" id="btnWinClose">Close</button>
@@ -2260,19 +2264,30 @@
   // Levels reach and pass 100+ on a side by roughly level 45-50, and are capped
   // well below the point where they'd stop rendering legibly (see MIN_LEGIBLE_CELL
   // and the scrollable maze view — big levels scroll, they never shrink to specks).
-  const LEVEL_DIM_CAP = 260;
+  // Kept low enough that even a maxed-out level stays comfortably viewable
+  // without turning into a long scroll-fest.
+  const LEVEL_DIM_CAP = 130;
   function levelDims(level) {
     const base = 5;
     const growth = Math.max(0, level - 1);
     const angle = level * 0.55;
-    const wideFactor = 1 + 0.4 * Math.sin(angle);
-    const tallFactor = 1 + 0.4 * Math.cos(angle);
+    // A smaller amplitude here keeps width and height growing at closer
+    // rates, so mazes stay closer to a balanced rectangle instead of
+    // stretching into a long, screen-wasting sliver at some levels.
+    const wideFactor = 1 + 0.18 * Math.sin(angle);
+    const tallFactor = 1 + 0.18 * Math.cos(angle);
     let cols = Math.round(base + growth * 1.8 * wideFactor);
     let rows = Math.round(base + growth * 1.8 * tallFactor);
     cols = Math.min(LEVEL_DIM_CAP, Math.max(5, cols));
     rows = Math.min(LEVEL_DIM_CAP, Math.max(5, rows));
     return { cols, rows };
   }
+
+  // Hard ceiling on how far Level mode's level counter climbs. Once reached,
+  // the level number and maze difficulty stop increasing — see goToLevelStep,
+  // updateLevelPanel, and handleWin for where this is enforced/surfaced.
+  // Just change this one number to move the cap.
+  const MAX_LEVEL = 250;
 
   const CHARACTERS = [
     { id: 'fox',   emoji: '🦊', color: '#3ADBC4', label: 'Fox' },
@@ -2751,6 +2766,7 @@
   const levelPanel = document.getElementById('levelPanel');
   const levelNumEl = document.getElementById('levelNum');
   const levelDimsEl = document.getElementById('levelDims');
+  const maxLevelNote = document.getElementById('maxLevelNote');
   const levelJumpInput = document.getElementById('levelJumpInput');
   const btnStartLevel = document.getElementById('btnStartLevel');
   const levelProgressCount = document.getElementById('levelProgressCount');
@@ -2760,6 +2776,7 @@
   const winStats = document.getElementById('winStats');
   const winBadgeAlert = document.getElementById('winBadgeAlert');
   const winCelebrate = document.getElementById('winCelebrate');
+  const winMaxLevel = document.getElementById('winMaxLevel');
   const btnWinNextLevel = document.getElementById('btnWinNextLevel');
   const loseOverlay = document.getElementById('loseOverlay');
   const loseIcon = document.getElementById('loseIcon');
@@ -4044,9 +4061,18 @@
   function goToLevelStep(direction) {
     clearTimeout(winAutoAdvanceTimer);
     clearTimeout(loseAutoAdvanceTimer);
+    // At the cap, winning has nowhere further to go — just clear the
+    // overlays and refresh the panel so the "max level reached" state
+    // shows, instead of warping into a level that doesn't exist.
+    if (direction > 0 && state.level >= MAX_LEVEL) {
+      winOverlay.classList.remove('show');
+      clearConfetti();
+      updateLevelPanel();
+      return;
+    }
     if (direction > 0) { winOverlay.classList.remove('show'); clearConfetti(); }
     else { loseOverlay.classList.remove('show'); }
-    const nextLevel = Math.max(1, state.level + direction);
+    const nextLevel = Math.min(MAX_LEVEL, Math.max(1, state.level + direction));
     playLevelTransition(direction, nextLevel, () => {
       state.level = nextLevel;
       const dims = levelDims(state.level);
@@ -4067,15 +4093,18 @@
     winIcon.textContent = currentTheme().canvas.finishEmoji;
     winBadgeAlert.style.display = 'none';
     winCelebrate.style.display = 'none';
-    btnWinNextLevel.style.display = state.sizeKey === 'level' ? 'inline-block' : 'none';
+    const atMaxLevel = state.sizeKey === 'level' && state.level >= MAX_LEVEL;
+    if (winMaxLevel) winMaxLevel.style.display = atMaxLevel ? 'block' : 'none';
+    btnWinNextLevel.style.display = (state.sizeKey === 'level' && !atMaxLevel) ? 'inline-block' : 'none';
     winOverlay.classList.add('show');
     popWinIcon();
     burstConfetti();
 
     // Level mode carries the player straight into the next level — no
     // button press needed. Cleared if the player dismisses the win overlay
-    // manually before the timer fires.
-    if (state.sizeKey === 'level') {
+    // manually before the timer fires. Skipped entirely once the level cap
+    // is reached, since there's no next level to warp into.
+    if (state.sizeKey === 'level' && !atMaxLevel) {
       clearTimeout(winAutoAdvanceTimer);
       winAutoAdvanceTimer = setTimeout(() => {
         if (!winOverlay.classList.contains('show')) return;
@@ -7334,9 +7363,14 @@
 
   function updateLevelPanel() {
     const dims = levelDims(state.level);
-    levelNumEl.textContent = `Level ${state.level}`;
+    const atMax = state.level >= MAX_LEVEL;
+    levelNumEl.textContent = atMax ? `Level ${state.level} · MAX` : `Level ${state.level}`;
     levelDimsEl.textContent = `${dims.cols} × ${dims.rows} cells`;
     levelJumpInput.value = '';
+    levelJumpInput.max = MAX_LEVEL;
+    const btnLevelNext = document.getElementById('btnLevelNext');
+    if (btnLevelNext) btnLevelNext.disabled = atMax;
+    if (maxLevelNote) maxLevelNote.style.display = atMax ? 'block' : 'none';
     const isCurrent = state.sizeKey === 'level' && state.cols === dims.cols && state.rows === dims.rows && state.started;
     btnStartLevel.textContent = isCurrent ? `Restart Level ${state.level}` : `Start Level ${state.level}`;
   }
@@ -7418,13 +7452,13 @@
     updateLevelPanel();
   });
   document.getElementById('btnLevelNext').addEventListener('click', () => {
-    state.level = state.level + 1;
+    state.level = Math.min(MAX_LEVEL, state.level + 1);
     updateLevelPanel();
   });
   document.getElementById('btnLevelJump').addEventListener('click', () => {
     let lv = parseInt(levelJumpInput.value, 10);
     if (isNaN(lv) || lv < 1) lv = 1;
-    state.level = Math.min(500, lv);
+    state.level = Math.min(MAX_LEVEL, lv);
     updateLevelPanel();
   });
   btnStartLevel.addEventListener('click', () => {
