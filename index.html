@@ -7650,6 +7650,43 @@
     nextBtn.disabled = !state.mazeReady;
     nextBtn.title = state.mazeReady ? '' : 'Pick a maze size above first';
   }
+
+  // ---------- Browser back/forward support ----------
+  // Previously screens were only ever switched by calling showScreen()
+  // directly — nothing told the browser a "navigation" had happened, so the
+  // History API never got a new entry. That's why the mouse's side buttons
+  // (and Alt+Left/Right) didn't work: there was nothing in history to go
+  // back or forward *to*. Since every screen change already funnels through
+  // showScreen(), that's the one place we need to touch: each call records
+  // which screen is showing via history.pushState/replaceState, and a
+  // popstate listener re-shows whichever screen a back/forward lands on.
+  // isRestoringScreenFromHistory guards against that popstate-triggered call
+  // pushing yet another entry, which would otherwise turn one "back" press
+  // into a loop.
+  let isRestoringScreenFromHistory = false;
+  let hasPushedInitialScreenState = false;
+
+  function syncScreenHistoryState(name) {
+    if (isRestoringScreenFromHistory) return;
+    const url = location.pathname + location.search + location.hash;
+    if (!hasPushedInitialScreenState) {
+      hasPushedInitialScreenState = true;
+      // Replace (rather than push) the entry the page already loaded on,
+      // so opening the app doesn't cost an extra no-op history entry before
+      // the first screen even shows.
+      history.replaceState({ screen: name }, '', url);
+    } else if (!history.state || history.state.screen !== name) {
+      history.pushState({ screen: name }, '', url);
+    }
+  }
+
+  window.addEventListener('popstate', (e) => {
+    const target = (e.state && e.state.screen) || 'signin';
+    isRestoringScreenFromHistory = true;
+    showScreen(target);
+    isRestoringScreenFromHistory = false;
+  });
+
   function showScreen(name) {
     Object.keys(screenEls).forEach(key => {
       if (screenEls[key]) screenEls[key].style.display = (key === name) ? '' : 'none';
@@ -7690,6 +7727,7 @@
         showRaceSetupUI();
       }
     }
+    syncScreenHistoryState(name);
     window.scrollTo(0, 0);
   }
 
