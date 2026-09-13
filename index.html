@@ -2777,6 +2777,7 @@
       cols: null,
       rows: null,
       mazeReceived: false,
+      startAt: null,
       players: {},
       channel: null
     }
@@ -3997,7 +3998,7 @@
     // Broadcast the finish the instant the exit is reached — not after the
     // finish animation plays — so other racers' rosters update promptly and
     // the recorded time isn't padded by animation length.
-    updateRacePresence(isExit ? { finished: true, time: state.seconds } : null);
+    updateRacePresence(isExit ? { finished: true, time: raceElapsedSeconds() } : null);
     if (isExit) { startFinishSequence(); return; }
 
     const newCell = state.cells[state.player.y * state.cols + state.player.x];
@@ -8094,6 +8095,7 @@
   }
 
   function showRaceSetupUI() {
+    stopRaceRosterTick();
     if (raceActiveCard) raceActiveCard.style.display = 'none';
     raceSetupNote.textContent = '';
     raceSetupNote.className = 'field-note';
@@ -8109,6 +8111,7 @@
   }
 
   function showRaceActiveUI(code, waiting) {
+    startRaceRosterTick();
     if (raceActiveCard) raceActiveCard.style.display = '';
     raceCodeDisplay.textContent = code;
     // Hosting/joining always drops you straight into the game screen —
@@ -8165,6 +8168,32 @@
     draw();
   }
 
+  function raceElapsedSeconds() {
+    // Wall-clock elapsed since the race's shared start (agreed via
+    // room-info, see connectRaceChannel), not each racer's own personal
+    // "time since my first move" stopwatch — the latter used to be what
+    // got sent as a finisher's time, which meant two racers' times weren't
+    // actually comparable if one of them started moving later than the
+    // other (e.g. took a few extra seconds to load in after joining).
+    // That's what let a racer who genuinely finished *later* in real time
+    // still show up ranked first. Falls back to the personal stopwatch
+    // only if a startAt somehow never arrived.
+    if (state.race.startAt) return Math.max(0, Math.round((Date.now() - state.race.startAt) / 1000));
+    return state.seconds;
+  }
+
+  let raceRosterTickInterval = null;
+  function startRaceRosterTick() {
+    if (raceRosterTickInterval) return;
+    raceRosterTickInterval = setInterval(() => {
+      if (!state.race.active) { stopRaceRosterTick(); return; }
+      renderRaceRoster();
+    }, 1000);
+  }
+  function stopRaceRosterTick() {
+    if (raceRosterTickInterval) { clearInterval(raceRosterTickInterval); raceRosterTickInterval = null; }
+  }
+
   function renderRaceRoster() {
     if (!raceRosterEl) return;
     const players = Object.values(state.race.players || {});
@@ -8175,13 +8204,20 @@
       if (b.finished) return 1;
       return (b.moves || 0) - (a.moves || 0);
     });
+    // Everyone still racing shares the same "time so far" — the race's
+    // own wall-clock elapsed time — so there's no need to track a
+    // per-racer live timestamp over the network for this; it's the same
+    // number for the whole room until someone finishes and locks theirs in.
+    const liveElapsed = raceElapsedSeconds();
     let html = '<div class="lb-list">';
     sorted.forEach((p, i) => {
       const rank = i + 1;
       const isMe = p.id === state.race.myId;
       const chr = CHARACTERS.find(c => c.id === p.character) || CHARACTERS[0];
       const glyph = chr.id === 'custom' ? '🖼️' : chr.emoji;
-      const status = p.finished ? `🏁 ${formatLbTime(p.time || 0)}` : `${p.moves || 0} moves`;
+      const status = p.finished
+        ? `🏁 ${formatLbTime(p.time || 0)} · ${p.moves || 0} moves`
+        : `${p.moves || 0} moves · ${formatLbTime(liveElapsed)}`;
       // For our own row, reflect local mic state directly rather than
       // waiting on a presence round-trip, so the icon updates the instant
       // you tap Join/Mute instead of a beat later.
@@ -8703,7 +8739,7 @@
 
   function broadcastRoomInfo() {
     if (!state.race.channel || !state.race.isHost) return;
-    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed } });
+    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed, startAt: state.race.startAt } });
   }
 
   // Tears down whatever race channel is currently open, if any, without
@@ -8714,12 +8750,13 @@
 
   function leaveRaceInternal() {
     leaveVoiceChat();
+    stopRaceRosterTick();
     if (state.race.channel) {
       try { state.race.channel.unsubscribe(); } catch (e) { /* already gone */ }
     }
     clearTimeout(raceJoinTimeout);
     clearTimeout(raceReconnectTimer);
-    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, mazeReceived: false, players: {}, channel: null };
+    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, mazeReceived: false, startAt: null, players: {}, channel: null };
   }
 
   // Sends the racer's real, current position/move-count/finish state —
@@ -8767,6 +8804,11 @@
       cols: existingRaceState ? existingRaceState.cols : (dims ? dims.cols : null),
       rows: existingRaceState ? existingRaceState.rows : (dims ? dims.rows : null),
       mazeReceived: existingRaceState ? existingRaceState.mazeReceived : !!isHost,
+      // The host's own clock is the race's shared "start line" — set the
+      // instant they open the room, then handed to every joiner via
+      // room-info below, so everyone's finish time is measured against the
+      // same wall-clock reference instead of each racer's own device.
+      startAt: existingRaceState ? existingRaceState.startAt : (isHost ? Date.now() : null),
       players: {},
       channel: null
     };
@@ -8782,6 +8824,7 @@
       state.race.seed = payload.seed;
       state.race.cols = payload.cols;
       state.race.rows = payload.rows;
+      state.race.startAt = payload.startAt || Date.now();
       applyRaceMaze(payload.cols, payload.rows, payload.seed);
       updateRacePresence();
       showRaceActiveUI(code, false);
@@ -8816,7 +8859,7 @@
           if (state.race.active && state.race.code === code) {
             raceActiveNote.textContent = 'Connection dropped — reconnecting…';
             raceActiveNote.className = 'field-note error';
-            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived };
+            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt };
             try { channel.unsubscribe(); } catch (e) { /* already gone */ }
             clearTimeout(raceReconnectTimer);
             raceReconnectTimer = setTimeout(() => {
