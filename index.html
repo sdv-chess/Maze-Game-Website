@@ -8830,13 +8830,30 @@
       showRaceActiveUI(code, false);
     });
     channel.on('presence', { event: 'sync' }, syncRaceRosterFromPresence);
+    // Supabase/Phoenix presence models every track() call (even one that
+    // just updates your own metadata, like moving or toggling mute) as a
+    // "leave" of your OLD presence ref immediately followed by a "join" of
+    // a NEW one — for the SAME player. That means these two handlers used
+    // to fire on literally every move, mute, or camera toggle anyone made,
+    // not just on someone actually leaving the room. The 'leave' handler
+    // was reading that as "this racer is gone" and tearing down their
+    // voice/video connection on the spot — which is exactly why muting (or
+    // even just moving) looked like it was breaking the call: it was,
+    // constantly, then immediately reconnecting, over and over. The fix is
+    // to check the *current* roster after resyncing — a real leave means
+    // that id is genuinely no longer there; a metadata refresh means it
+    // still is, so there's nothing to tear down.
     channel.on('presence', { event: 'join' }, () => {
+      const hadIds = new Set(Object.keys(state.race.players || {}));
       syncRaceRosterFromPresence();
-      if (state.race.isHost) broadcastRoomInfo();
+      const isNewJoiner = Object.keys(state.race.players || {}).some(id => !hadIds.has(id));
+      if (state.race.isHost && isNewJoiner) broadcastRoomInfo();
     });
     channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
       syncRaceRosterFromPresence();
-      (leftPresences || []).forEach(p => { if (p && p.id) closeVoicePeer(p.id); });
+      (leftPresences || []).forEach(p => {
+        if (p && p.id && !state.race.players[p.id]) closeVoicePeer(p.id);
+      });
     });
 
     return new Promise((resolve, reject) => {
