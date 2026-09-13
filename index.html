@@ -1045,8 +1045,8 @@
   .lb-row.speaking { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset, 0 0 8px rgba(58,219,196,0.35); }
   .lb-row.speaking .lb-mic { transform: scale(1.25); }
 
-  .voice-row { display: flex; gap: 8px; }
-  .voice-row button { flex: 1; }
+  .voice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .voice-row button { flex: 1 1 28%; min-width: 96px; }
   button.voice-toggle.on {
     background: rgba(58,219,196,0.14);
     border-color: var(--teal);
@@ -1062,6 +1062,33 @@
     border-color: var(--coral);
     color: var(--coral);
   }
+  button.camera-toggle.on {
+    background: rgba(181,131,247,0.16);
+    border-color: var(--violet);
+    color: var(--violet);
+  }
+
+  .voice-video-grid { display: none; flex-wrap: wrap; gap: 8px; margin-bottom: 2px; }
+  .voice-video-grid.show { display: flex; }
+  .voice-tile {
+    position: relative;
+    width: 100px; height: 75px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--stone);
+    border: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+  .voice-tile.hidden-tile { display: none; }
+  .voice-tile video { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--stone); }
+  .voice-tile.local video { transform: scaleX(-1); }
+  .voice-tile-label {
+    position: absolute; left: 4px; bottom: 3px;
+    font-size: 9px; color: #fff;
+    text-shadow: 0 0 3px #000, 0 0 3px #000;
+    max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .voice-tile.speaking { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(58,219,196,0.5); }
   .lb-champion-banner {
     display: flex;
     align-items: center;
@@ -1412,7 +1439,7 @@
       <div class="card">
         <h2>🏁 Multiplayer</h2>
         <p class="field-note">Race a friend live through the exact same maze — host a room or join one with a code.</p>
-        <button class="primary" id="btnModeMulti" style="padding:14px; font-size:15px; margin-top:8px;">Race a friend →</button>
+        <button class="primary" id="btnModeMulti" style="padding:14px; font-size:15px; margin-top:8px;">Race a friend →<span class="friend-count-pill" id="raceInvitePill" style="display:none;"></span></button>
       </div>
     </div>
   </div>
@@ -1471,6 +1498,10 @@
       <button class="secondary" id="btnMultiBack" style="width:auto; padding:8px 14px; align-self:flex-start;">← Back</button>
     </header>
     <div class="panel">
+      <div class="card" id="raceInvitesCard" style="display:none;">
+        <h2>📨 Race invites</h2>
+        <div class="friend-list" id="raceInvitesList"></div>
+      </div>
       <div class="card" id="raceCard">
         <h2>🏁 Race a friend</h2>
         <div class="stack-gap" id="raceSetupBlock">
@@ -1728,9 +1759,11 @@
             <button class="secondary" id="btnCopyRaceLink">🔗 Copy link</button>
           </div>
           <div id="raceRoster"><p class="lb-empty">Waiting for racers…</p></div>
+          <div class="voice-video-grid" id="voiceVideoGrid"></div>
           <div class="voice-row">
             <button class="secondary voice-toggle" id="btnToggleVoice">🎤 Join voice chat</button>
             <button class="secondary mute-toggle" id="btnToggleMute" style="display:none;">🔊 Mute</button>
+            <button class="secondary camera-toggle" id="btnToggleCamera" style="display:none;">📹 Camera on</button>
           </div>
           <p class="field-note" id="voiceNote"></p>
           <p class="field-note" id="raceActiveNote"></p>
@@ -2781,10 +2814,12 @@
   const voiceChat = {
     active: false,      // local mic joined?
     muted: false,       // local mic joined but silenced?
+    videoOn: false,      // local camera joined?
     localStream: null,
+    localVideoTrack: null,
     audioCtx: null,
     localAnalyser: null,
-    peers: {},           // peerId -> { pc, audioEl, analyser, dataArr, makingOffer, pendingCandidates }
+    peers: {},           // peerId -> { pc, mediaEl, tileEl, analyser, remoteSet, pendingCandidates, polite, makingOffer, ignoreOffer }
     speaking: {},         // peerId -> bool, plus 'me' for local
     rafId: null
   };
@@ -2939,7 +2974,9 @@
   const raceRosterEl = document.getElementById('raceRoster');
   const btnToggleVoice = document.getElementById('btnToggleVoice');
   const btnToggleMute = document.getElementById('btnToggleMute');
+  const btnToggleCamera = document.getElementById('btnToggleCamera');
   const voiceNote = document.getElementById('voiceNote');
+  const voiceVideoGrid = document.getElementById('voiceVideoGrid');
   // Shows the width/height fields only when "Custom" is picked, same
   // pattern as the single-player custom size panel.
   function syncRaceCustomPanel() {
@@ -6206,6 +6243,12 @@
   // stored (see createAccount above).
   let friendsData = { friends: [], incoming: [], outgoing: [] };
   let inboxChannel = null;
+  // Pending race invites received this session — kept in a simple in-memory
+  // list (not a DB table) so they show up as a persistent box rather than a
+  // toast that vanishes if you don't act on it in time. Since it's memory-
+  // only, it resets on reload/sign-out — the toast (below) is still the
+  // only "you were invited while offline" notice.
+  let raceInvites = [];
 
   async function loadFriendsData() {
     friendsData = { friends: [], incoming: [], outgoing: [] };
@@ -6353,7 +6396,8 @@
       showFriendToast(`${payload.from} accepted your friend request!`, null, null);
     });
     ch.on('broadcast', { event: 'race-invite' }, ({ payload }) => {
-      showFriendToast(`${payload.from} invited you to race!`, 'Join', () => { hideFriendToast(); joinRace(payload.code); });
+      addRaceInvite(payload.from, payload.code);
+      showFriendToast(`${payload.from} invited you to race!`, 'Join', () => { hideFriendToast(); joinRaceFromInvite(payload.code, payload.from); });
     });
     ch.subscribe();
     inboxChannel = ch;
@@ -6364,6 +6408,75 @@
       try { inboxChannel.unsubscribe(); } catch (e) { /* already gone */ }
       inboxChannel = null;
     }
+    // Invites are tied to this signed-in session's inbox — clear them out
+    // along with it so signing into a different account never shows the
+    // previous account's pending invites.
+    raceInvites = [];
+    renderRaceInvites();
+  }
+
+  // ---------- Race invites box ----------
+  // A little persistent inbox for "you've been invited to race" pings,
+  // separate from the auto-dismissing toast above — so an invite you don't
+  // act on immediately doesn't just vanish after 15 seconds. Lives on the
+  // Multiplayer screen; a small count pill on "Race a friend" flags it
+  // from the mode-select screen too.
+  function addRaceInvite(from, code) {
+    // Replace any earlier invite from the same friend for the same code
+    // (e.g. a duplicate broadcast) rather than stacking duplicates.
+    raceInvites = raceInvites.filter(i => !(i.from === from && i.code === code));
+    raceInvites.unshift({ id: `${from}-${code}-${Date.now()}`, from, code });
+    renderRaceInvites();
+    updateRaceInvitePill();
+  }
+
+  function removeRaceInvite(id) {
+    raceInvites = raceInvites.filter(i => i.id !== id);
+    renderRaceInvites();
+    updateRaceInvitePill();
+  }
+
+  function updateRaceInvitePill() {
+    const pill = document.getElementById('raceInvitePill');
+    if (!pill) return;
+    const n = raceInvites.length;
+    pill.style.display = n ? 'inline-flex' : 'none';
+    pill.textContent = n;
+  }
+
+  function renderRaceInvites() {
+    const card = document.getElementById('raceInvitesCard');
+    const list = document.getElementById('raceInvitesList');
+    if (!card || !list) return;
+    if (!raceInvites.length) { card.style.display = 'none'; list.innerHTML = ''; return; }
+    card.style.display = '';
+    list.innerHTML = '';
+    raceInvites.forEach(inv => {
+      const row = document.createElement('div');
+      row.className = 'friend-row';
+      row.innerHTML = `<span class="friend-avatar">${escapeHtml(inv.from.slice(0, 1))}</span>` +
+        `<span class="friend-name">${escapeHtml(inv.from)} invited you to race</span>` +
+        `<span class="friend-actions"><button class="primary" data-invite-join="${inv.id}">🏁 Join</button><button class="secondary" data-invite-dismiss="${inv.id}">Dismiss</button></span>`;
+      list.appendChild(row);
+    });
+  }
+
+  document.getElementById('raceInvitesList').addEventListener('click', (e) => {
+    const joinId = e.target.getAttribute('data-invite-join');
+    const dismissId = e.target.getAttribute('data-invite-dismiss');
+    if (joinId) {
+      const inv = raceInvites.find(i => i.id === joinId);
+      if (inv) { removeRaceInvite(joinId); joinRaceFromInvite(inv.code, inv.from); }
+    } else if (dismissId) {
+      removeRaceInvite(dismissId);
+    }
+  });
+
+  // Thin wrapper so both the toast and the invites box route through one
+  // place — joinRace() already takes care of switching to the game screen
+  // once the room connects.
+  function joinRaceFromInvite(code, fromUsername) {
+    joinRace(code);
   }
 
   // Best-effort: opens a short-lived channel just long enough to broadcast
@@ -7813,6 +7926,7 @@
     } else if (name === 'friends') {
       renderFriendsUI();
     } else if (name === 'multiplayer') {
+      renderRaceInvites();
       // hostRace()/joinRace() both bail out immediately while a race is
       // already active, so navigating back here from an in-progress race
       // — e.g. via the "🧍 Single player" button on the game screen used
@@ -8022,7 +8136,8 @@
       finished: false,
       time: null,
       voice: voiceChat.active,
-      muted: voiceChat.muted
+      muted: voiceChat.muted,
+      video: voiceChat.videoOn
     }, extra || {});
     state.race.channel.track(payload).catch(() => {});
   }
@@ -8063,12 +8178,14 @@
       // you tap Join/Mute instead of a beat later.
       const onVoice = isMe ? voiceChat.active : !!p.voice;
       const onMuted = isMe ? voiceChat.muted : !!p.muted;
+      const onVideo = isMe ? voiceChat.videoOn : !!p.video;
       const micGlyph = onVoice ? (onMuted ? '🔇' : '🎙️') : '';
       html += `
         <div class="lb-row rank-${rank}${isMe ? ' me' : ''}" data-pid="${escapeHtml(p.id || '')}">
           <span class="lb-rank">${rank <= 3 && p.finished ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
           <span class="lb-name">${glyph} ${escapeHtml(p.name || 'Guest')}</span>
           ${micGlyph ? `<span class="lb-mic${onMuted ? ' muted' : ''}" data-mic="${escapeHtml(p.id || '')}">${micGlyph}</span>` : ''}
+          ${onVideo ? `<span class="lb-mic" title="Camera on">📹</span>` : ''}
           <span class="lb-stats">${status}</span>
         </div>`;
     });
@@ -8095,6 +8212,11 @@
       btnToggleMute.style.display = voiceChat.active ? '' : 'none';
       btnToggleMute.textContent = voiceChat.muted ? '🔇 Unmute' : '🔊 Mute';
       btnToggleMute.classList.toggle('muted', voiceChat.muted);
+    }
+    if (btnToggleCamera) {
+      btnToggleCamera.style.display = voiceChat.active ? '' : 'none';
+      btnToggleCamera.textContent = voiceChat.videoOn ? '📹 Camera off' : '📹 Camera on';
+      btnToggleCamera.classList.toggle('on', voiceChat.videoOn);
     }
   }
 
@@ -8127,6 +8249,10 @@
   function leaveVoiceChat() {
     stopSpeakingLoop();
     Object.keys(voiceChat.peers).forEach(closeVoicePeer);
+    if (voiceChat.localVideoTrack) {
+      try { voiceChat.localVideoTrack.stop(); } catch (e) { /* already stopped */ }
+      voiceChat.localVideoTrack = null;
+    }
     if (voiceChat.localStream) {
       voiceChat.localStream.getTracks().forEach(t => t.stop());
       voiceChat.localStream = null;
@@ -8140,10 +8266,13 @@
     const wasActive = voiceChat.active;
     voiceChat.active = false;
     voiceChat.muted = false;
+    voiceChat.videoOn = false;
+    removeLocalVideoTile();
     syncVoiceButtons();
     if (voiceNote) { voiceNote.textContent = ''; voiceNote.className = 'field-note'; }
     if (state.race.active) renderRaceRoster();
     updateRoomSpeakingClasses();
+    refreshVideoGridVisibility();
     if (wasActive) { updateRacePresence(); }
   }
 
@@ -8156,13 +8285,103 @@
     updateRacePresence();
   }
 
+  // ---- Video chat ----
+  // Adds a camera track to the already-open mic connection. Renegotiation
+  // (needed the moment a track is added or removed mid-call) is handled by
+  // each RTCPeerConnection's own onnegotiationneeded handler, set up for
+  // both sides in createVoicePeer — see the "perfect negotiation" comment
+  // there for how offer/answer collisions between the two sides get
+  // resolved without either end having to coordinate who goes first.
+  async function toggleCamera() {
+    if (!voiceChat.active) return;
+    if (voiceChat.videoOn) { stopCamera(); } else { await startCamera(); }
+  }
+
+  async function startCamera() {
+    voiceNote.textContent = 'Requesting camera…';
+    voiceNote.className = 'field-note';
+    let camStream;
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 320 }, height: { ideal: 240 } } });
+    } catch (e) {
+      voiceNote.textContent = "Couldn't access your camera — check your browser's permission for this site.";
+      voiceNote.className = 'field-note error';
+      return;
+    }
+    const track = camStream.getVideoTracks()[0];
+    voiceChat.localVideoTrack = track;
+    voiceChat.localStream.addTrack(track);
+    showLocalVideoTile(voiceChat.localStream);
+    Object.values(voiceChat.peers).forEach(entry => entry.pc.addTrack(track, voiceChat.localStream));
+    voiceChat.videoOn = true;
+    voiceNote.textContent = 'Voice chat on — connecting to racers…';
+    voiceNote.className = 'field-note success';
+    syncVoiceButtons();
+    renderRaceRoster();
+    updateRacePresence();
+  }
+
+  function stopCamera() {
+    const track = voiceChat.localVideoTrack;
+    if (track) {
+      Object.values(voiceChat.peers).forEach(entry => {
+        const sender = entry.pc.getSenders().find(s => s.track === track);
+        if (sender) { try { entry.pc.removeTrack(sender); } catch (e) { /* already gone */ } }
+      });
+      try { track.stop(); } catch (e) { /* already stopped */ }
+      try { voiceChat.localStream.removeTrack(track); } catch (e) { /* already removed */ }
+      voiceChat.localVideoTrack = null;
+    }
+    removeLocalVideoTile();
+    voiceChat.videoOn = false;
+    syncVoiceButtons();
+    renderRaceRoster();
+    updateRacePresence();
+  }
+
+  function showLocalVideoTile(stream) {
+    if (!voiceVideoGrid) return;
+    let tile = document.getElementById('voiceLocalTile');
+    if (!tile) {
+      tile = document.createElement('div');
+      tile.id = 'voiceLocalTile';
+      tile.className = 'voice-tile local';
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.muted = true; // never echo your own mic back at yourself
+      video.playsInline = true;
+      tile.appendChild(video);
+      const label = document.createElement('span');
+      label.className = 'voice-tile-label';
+      label.textContent = 'You';
+      tile.appendChild(label);
+      voiceVideoGrid.insertBefore(tile, voiceVideoGrid.firstChild);
+    }
+    tile.querySelector('video').srcObject = stream;
+    refreshVideoGridVisibility();
+  }
+
+  function removeLocalVideoTile() {
+    const tile = document.getElementById('voiceLocalTile');
+    if (tile) { try { tile.remove(); } catch (e) { /* already gone */ } }
+    refreshVideoGridVisibility();
+  }
+
+  function refreshVideoGridVisibility() {
+    if (!voiceVideoGrid) return;
+    const anyVisible = voiceChat.videoOn ||
+      Object.values(voiceChat.peers).some(e => e.tileEl && !e.tileEl.classList.contains('hidden-tile'));
+    voiceVideoGrid.classList.toggle('show', anyVisible);
+  }
+
   // Reconciles who we should have a live WebRTC connection to, based on
   // the current race roster's `voice` flag in presence. Runs after every
   // presence sync, so it naturally picks up someone turning their mic on
   // after we've already joined, and tears a peer down the moment they
   // turn theirs off or leave the race. To avoid both sides racing to
   // offer at once, only the side with the lexicographically smaller id
-  // initiates — the other side just waits for that offer.
+  // proactively opens the connection — the other side just waits for that
+  // offer to arrive and answers it.
   function syncVoicePeers() {
     if (!state.race.active) return;
     const myId = state.race.myId;
@@ -8171,9 +8390,7 @@
       Object.keys(players).forEach(pid => {
         if (pid === myId) return;
         const p = players[pid];
-        if (p && p.voice && !voiceChat.peers[pid]) {
-          if (myId < pid) createVoicePeer(pid, true);
-        }
+        if (p && p.voice && !voiceChat.peers[pid] && myId < pid) createVoicePeer(pid);
       });
     }
     Object.keys(voiceChat.peers).forEach(pid => {
@@ -8182,45 +8399,48 @@
     });
   }
 
-  function createVoicePeer(peerId, isInitiator) {
+  // "Perfect negotiation" pattern: both sides register onnegotiationneeded
+  // (needed so turning a camera on/off mid-call renegotiates cleanly no
+  // matter which side started the connection), and collisions — both
+  // sides trying to send an offer at once — are resolved by having one
+  // fixed "polite" side per pair roll its own offer back and accept the
+  // other's instead. Whoever's id sorts higher is polite; this only needs
+  // to be consistent between the two sides, not globally meaningful.
+  function createVoicePeer(peerId) {
     if (voiceChat.peers[peerId]) return voiceChat.peers[peerId];
     const pc = new RTCPeerConnection({ iceServers: VOICE_ICE_SERVERS });
-    const entry = { pc, audioEl: null, analyser: null, pendingCandidates: [], remoteSet: false };
+    const entry = {
+      pc, mediaEl: null, tileEl: null, analyser: null,
+      pendingCandidates: [], remoteSet: false,
+      polite: state.race.myId > peerId,
+      makingOffer: false, ignoreOffer: false
+    };
     voiceChat.peers[peerId] = entry;
 
     if (voiceChat.localStream) {
       voiceChat.localStream.getTracks().forEach(track => pc.addTrack(track, voiceChat.localStream));
     }
     pc.onicecandidate = e => { if (e.candidate) sendVoiceSignal(peerId, 'ice', { candidate: e.candidate }); };
-    pc.ontrack = e => {
-      const stream = e.streams[0];
-      let audioEl = entry.audioEl;
-      if (!audioEl) {
-        audioEl = document.createElement('audio');
-        audioEl.autoplay = true;
-        audioEl.style.display = 'none';
-        document.body.appendChild(audioEl);
-        entry.audioEl = audioEl;
-      }
-      audioEl.srcObject = stream;
-      if (voiceChat.audioCtx) {
-        try { entry.analyser = setupAnalyser(voiceChat.audioCtx, stream); } catch (err) { /* cosmetic only */ }
-      }
-    };
+    pc.ontrack = e => attachRemoteTrack(peerId, e.streams[0]);
     pc.onconnectionstatechange = () => {
       if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) closeVoicePeer(peerId);
     };
-
-    if (isInitiator) {
-      pc.onnegotiationneeded = async () => {
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          sendVoiceSignal(peerId, 'offer', { sdp: pc.localDescription });
-        } catch (e) { /* ignore — a retry will come on the next sync */ }
-      };
-    }
+    pc.onnegotiationneeded = async () => {
+      try {
+        entry.makingOffer = true;
+        const offer = await pc.createOffer();
+        if (pc.signalingState !== 'stable') return;
+        await pc.setLocalDescription(offer);
+        sendVoiceSignal(peerId, 'offer', { sdp: pc.localDescription });
+      } catch (e) { /* ignore — a later renegotiation attempt will retry */ }
+      finally { entry.makingOffer = false; }
+    };
     return entry;
+  }
+
+  function flushPendingIce(entry) {
+    (entry.pendingCandidates || []).forEach(c => entry.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+    entry.pendingCandidates = [];
   }
 
   async function handleVoiceSignal(payload) {
@@ -8228,15 +8448,25 @@
     if (!peerId) return;
     if (payload.kind === 'offer') {
       if (!voiceChat.active) return; // not in voice chat — ignore invites
-      const entry = createVoicePeer(peerId, false);
+      const entry = createVoicePeer(peerId);
+      const pc = entry.pc;
+      const offerCollision = entry.makingOffer || pc.signalingState !== 'stable';
+      entry.ignoreOffer = !entry.polite && offerCollision;
+      if (entry.ignoreOffer) return;
       try {
-        await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        if (offerCollision) {
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' }),
+            pc.setRemoteDescription(new RTCSessionDescription(payload.sdp))
+          ]);
+        } else {
+          await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        }
         entry.remoteSet = true;
-        (entry.pendingCandidates || []).forEach(c => entry.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
-        entry.pendingCandidates = [];
-        const answer = await entry.pc.createAnswer();
-        await entry.pc.setLocalDescription(answer);
-        sendVoiceSignal(peerId, 'answer', { sdp: entry.pc.localDescription });
+        flushPendingIce(entry);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        sendVoiceSignal(peerId, 'answer', { sdp: pc.localDescription });
       } catch (e) { /* connection will simply not come up with this peer */ }
     } else if (payload.kind === 'answer') {
       const entry = voiceChat.peers[peerId];
@@ -8244,35 +8474,73 @@
       try {
         await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
         entry.remoteSet = true;
-        (entry.pendingCandidates || []).forEach(c => entry.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
-        entry.pendingCandidates = [];
+        flushPendingIce(entry);
       } catch (e) { /* ignore */ }
     } else if (payload.kind === 'ice') {
       const entry = voiceChat.peers[peerId];
       if (!entry || !payload.candidate) return;
       if (entry.remoteSet) {
-        entry.pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+        entry.pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(err => {
+          if (!entry.ignoreOffer) { /* benign — candidate arrived for a since-superseded description */ }
+        });
       } else {
         entry.pendingCandidates.push(payload.candidate);
       }
     }
   }
 
+  function ensurePeerTile(peerId) {
+    const entry = voiceChat.peers[peerId];
+    if (!entry || !voiceVideoGrid) return null;
+    if (!entry.tileEl) {
+      const tile = document.createElement('div');
+      tile.className = 'voice-tile hidden-tile';
+      tile.dataset.pid = peerId;
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      tile.appendChild(video);
+      const label = document.createElement('span');
+      label.className = 'voice-tile-label';
+      const p = (state.race.players || {})[peerId];
+      label.textContent = (p && p.name) || 'Racer';
+      tile.appendChild(label);
+      voiceVideoGrid.appendChild(tile);
+      entry.tileEl = tile;
+      entry.mediaEl = video;
+    }
+    return entry;
+  }
+
+  function attachRemoteTrack(peerId, stream) {
+    const entry = ensurePeerTile(peerId);
+    if (!entry) return;
+    entry.mediaEl.srcObject = stream;
+    const hasVideo = stream.getVideoTracks().length > 0;
+    entry.tileEl.classList.toggle('hidden-tile', !hasVideo);
+    if (voiceChat.audioCtx) {
+      try { entry.analyser = setupAnalyser(voiceChat.audioCtx, stream); } catch (err) { /* cosmetic only */ }
+    }
+    refreshVideoGridVisibility();
+  }
+
   function closeVoicePeer(peerId) {
     const entry = voiceChat.peers[peerId];
     if (!entry) return;
     try { entry.pc.close(); } catch (e) { /* already closed */ }
-    if (entry.audioEl) {
-      try { entry.audioEl.srcObject = null; entry.audioEl.remove(); } catch (e) { /* already gone */ }
+    if (entry.tileEl) {
+      try { entry.tileEl.remove(); } catch (e) { /* already gone */ }
     }
     delete voiceChat.peers[peerId];
     delete voiceChat.speaking[peerId];
     updateRoomSpeakingClasses();
+    refreshVideoGridVisibility();
   }
 
   // ---- Voice chat: "who's talking" indicator ----
   // Cosmetic only — a simple volume-above-threshold check per stream,
-  // reflected as a glow on that racer's roster row. Never gates audio.
+  // reflected as a glow on that racer's roster row (and video tile, if
+  // they have one). Never gates audio.
   function setupAnalyser(ctx, stream) {
     const source = ctx.createMediaStreamSource(stream);
     const analyser = ctx.createAnalyser();
@@ -8292,11 +8560,18 @@
   }
 
   function updateRoomSpeakingClasses() {
-    if (!raceRosterEl) return;
-    raceRosterEl.querySelectorAll('.lb-row[data-pid]').forEach(row => {
-      const pid = row.getAttribute('data-pid');
-      const speaking = pid === state.race.myId ? !!voiceChat.speaking.me : !!voiceChat.speaking[pid];
-      row.classList.toggle('speaking', !!speaking && voiceChat.active);
+    if (raceRosterEl) {
+      raceRosterEl.querySelectorAll('.lb-row[data-pid]').forEach(row => {
+        const pid = row.getAttribute('data-pid');
+        const speaking = pid === state.race.myId ? !!voiceChat.speaking.me : !!voiceChat.speaking[pid];
+        row.classList.toggle('speaking', !!speaking && voiceChat.active);
+      });
+    }
+    const localTile = document.getElementById('voiceLocalTile');
+    if (localTile) localTile.classList.toggle('speaking', !!voiceChat.speaking.me);
+    Object.keys(voiceChat.peers).forEach(pid => {
+      const tile = voiceChat.peers[pid].tileEl;
+      if (tile) tile.classList.toggle('speaking', !!voiceChat.speaking[pid]);
     });
   }
 
@@ -8324,6 +8599,7 @@
     });
   }
   if (btnToggleMute) btnToggleMute.addEventListener('click', toggleVoiceMute);
+  if (btnToggleCamera) btnToggleCamera.addEventListener('click', toggleCamera);
 
   function broadcastRoomInfo() {
     if (!state.race.channel || !state.race.isHost) return;
@@ -8369,7 +8645,8 @@
       time: null,
       host: isHost,
       voice: voiceChat.active,
-      muted: voiceChat.muted
+      muted: voiceChat.muted,
+      video: voiceChat.videoOn
     }, extra || {});
   }
 
