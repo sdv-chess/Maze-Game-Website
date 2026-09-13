@@ -2805,12 +2805,21 @@
   let raceUIActive = false;
 
   // ---------- Live race: voice chat ----------
-  // Peer-to-peer mic audio over WebRTC between everyone in the same race
-  // room, signaled through the same Supabase Realtime channel used for
-  // positions (broadcast event 'voice-signal', targeted by id). No media
-  // server is involved — audio flows directly between browsers, so it only
-  // works while the race channel itself is connected and stops the moment
-  // either side leaves.
+  // Peer-to-peer mic/camera audio+video over WebRTC between everyone in the
+  // same race room. Signaling (offer/answer/ICE) rides its OWN Supabase
+  // Realtime channel (`voice-${code}`), deliberately separate from the
+  // `race-${code}` channel used for positions/presence — a WebRTC handshake
+  // (especially with video, which negotiates more ICE candidates across
+  // more media lines) can burst dozens of broadcast messages in a couple of
+  // seconds, and piling that onto the same channel the race depends on for
+  // player positions was tipping Realtime's per-channel rate limit and
+  // dropping the whole thing — which is what was showing up as "Connection
+  // dropped — reconnecting…" and the other racer's avatar freezing/
+  // vanishing every time someone joined voice or toggled their camera.
+  // Keeping them on separate channels means a voice-signaling hiccup can no
+  // longer take the race itself down with it.
+  let voiceChannel = null;
+  let voiceReconnectTimer = null;
   const voiceChat = {
     active: false,      // local mic joined?
     muted: false,       // local mic joined but silenced?
@@ -8195,12 +8204,56 @@
 
   // ---- Voice chat: signaling helpers ----
   function sendVoiceSignal(toId, type, data) {
-    if (!state.race.channel) return;
-    state.race.channel.send({
+    if (!voiceChannel) return;
+    voiceChannel.send({
       type: 'broadcast',
       event: 'voice-signal',
       payload: Object.assign({ from: state.race.myId, to: toId, kind: type }, data || {})
     });
+  }
+
+  // Dedicated signaling channel for the current race's voice/video chat —
+  // opened when the local player joins voice, closed when they leave voice
+  // or the race. Kept separate from state.race.channel; see the comment on
+  // the voiceChat state block for why. Resolves once actually subscribed,
+  // so callers can be sure signals sent right after won't be missed.
+  function connectVoiceChannel(code, myId) {
+    disconnectVoiceChannel();
+    return new Promise((resolve) => {
+      const ch = sb.channel(`voice-${code}`, { config: { broadcast: { self: false } } });
+      ch.on('broadcast', { event: 'voice-signal' }, ({ payload }) => {
+        if (!payload || payload.to !== myId) return;
+        handleVoiceSignal(payload);
+      });
+      let settled = false;
+      ch.subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(voiceReconnectTimer);
+          if (!settled) { settled = true; voiceChannel = ch; resolve(ch); }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          if (!settled) { settled = true; resolve(null); return; }
+          // Signaling blipped — existing calls keep playing (they're direct
+          // peer connections, not routed through this channel), this only
+          // affects starting/renegotiating connections in the meantime.
+          if (voiceChat.active && voiceChannel === ch) {
+            clearTimeout(voiceReconnectTimer);
+            voiceReconnectTimer = setTimeout(() => {
+              if (voiceChat.active) {
+                connectVoiceChannel(code, myId).then(() => syncVoicePeers());
+              }
+            }, 1500);
+          }
+        }
+      });
+    });
+  }
+
+  function disconnectVoiceChannel() {
+    clearTimeout(voiceReconnectTimer);
+    if (voiceChannel) {
+      try { voiceChannel.unsubscribe(); } catch (e) { /* already gone */ }
+      voiceChannel = null;
+    }
   }
 
   function syncVoiceButtons() {
@@ -8220,6 +8273,24 @@
     }
   }
 
+  // Reflects the REAL state of each peer connection instead of a message
+  // that's set once on join and never revisited — previously this note
+  // said "connecting to racers…" forever even once everyone was fully
+  // connected, because nothing ever updated it afterwards.
+  function updateVoiceConnectionNote() {
+    if (!voiceChat.active || !voiceNote) return;
+    const ids = Object.keys(voiceChat.peers);
+    const connected = ids.filter(id => voiceChat.peers[id].pc.connectionState === 'connected').length;
+    if (!ids.length) {
+      voiceNote.textContent = 'Voice chat on — waiting for other racers to join…';
+    } else if (connected === ids.length) {
+      voiceNote.textContent = connected === 1 ? 'Voice chat connected.' : `Voice chat connected to ${connected} racers.`;
+    } else {
+      voiceNote.textContent = `Voice chat on — connecting to ${ids.length - connected} of ${ids.length} racer(s)…`;
+    }
+    voiceNote.className = 'field-note success';
+  }
+
   async function joinVoiceChat() {
     if (voiceChat.active || !state.race.active) return;
     voiceNote.textContent = 'Requesting microphone…';
@@ -8237,17 +8308,24 @@
       voiceChat.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       voiceChat.localAnalyser = setupAnalyser(voiceChat.audioCtx, voiceChat.localStream);
     } catch (e) { /* speaking indicator is cosmetic only */ }
-    voiceNote.textContent = 'Voice chat on — connecting to racers…';
+    voiceNote.textContent = 'Voice chat on — opening connection…';
     voiceNote.className = 'field-note success';
     syncVoiceButtons();
     renderRaceRoster();
+    // Signaling channel must be up BEFORE we announce voice:true in
+    // presence — otherwise a racer with a lower id who reacts to that
+    // presence flag by sending us an offer straight away could do so
+    // before we're even subscribed to receive it.
+    await connectVoiceChannel(state.race.code, state.race.myId);
     updateRacePresence();
     syncVoicePeers();
+    updateVoiceConnectionNote();
     startSpeakingLoop();
   }
 
   function leaveVoiceChat() {
     stopSpeakingLoop();
+    disconnectVoiceChannel();
     Object.keys(voiceChat.peers).forEach(closeVoicePeer);
     if (voiceChat.localVideoTrack) {
       try { voiceChat.localVideoTrack.stop(); } catch (e) { /* already stopped */ }
@@ -8397,6 +8475,7 @@
       const p = players[pid];
       if (!p || !p.voice || !voiceChat.active) closeVoicePeer(pid);
     });
+    updateVoiceConnectionNote();
   }
 
   // "Perfect negotiation" pattern: both sides register onnegotiationneeded
@@ -8413,7 +8492,7 @@
       pc, mediaEl: null, tileEl: null, analyser: null,
       pendingCandidates: [], remoteSet: false,
       polite: state.race.myId > peerId,
-      makingOffer: false, ignoreOffer: false
+      makingOffer: false, ignoreOffer: false, disconnectTimer: null
     };
     voiceChat.peers[peerId] = entry;
 
@@ -8423,7 +8502,26 @@
     pc.onicecandidate = e => { if (e.candidate) sendVoiceSignal(peerId, 'ice', { candidate: e.candidate }); };
     pc.ontrack = e => attachRemoteTrack(peerId, e.streams[0]);
     pc.onconnectionstatechange = () => {
-      if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) closeVoicePeer(peerId);
+      // 'disconnected' is often a brief ICE blip that recovers on its own
+      // (a WiFi hiccup, a network path change) — closing the connection
+      // the instant it appears was too aggressive and just meant a working
+      // call would drop and have to fully renegotiate from scratch over a
+      // moment's interruption. Give it a few seconds to self-heal first;
+      // 'failed' and 'closed' are unambiguous, so those still close right
+      // away.
+      if (pc.connectionState === 'connected') {
+        clearTimeout(entry.disconnectTimer);
+        entry.disconnectTimer = null;
+      } else if (pc.connectionState === 'disconnected') {
+        if (!entry.disconnectTimer) {
+          entry.disconnectTimer = setTimeout(() => {
+            if (pc.connectionState !== 'connected') closeVoicePeer(peerId);
+          }, 6000);
+        }
+      } else if (['failed', 'closed'].includes(pc.connectionState)) {
+        closeVoicePeer(peerId);
+      }
+      updateVoiceConnectionNote();
     };
     pc.onnegotiationneeded = async () => {
       try {
@@ -8527,6 +8625,7 @@
   function closeVoicePeer(peerId) {
     const entry = voiceChat.peers[peerId];
     if (!entry) return;
+    clearTimeout(entry.disconnectTimer);
     try { entry.pc.close(); } catch (e) { /* already closed */ }
     if (entry.tileEl) {
       try { entry.tileEl.remove(); } catch (e) { /* already gone */ }
@@ -8535,6 +8634,7 @@
     delete voiceChat.speaking[peerId];
     updateRoomSpeakingClasses();
     refreshVideoGridVisibility();
+    updateVoiceConnectionNote();
   }
 
   // ---- Voice chat: "who's talking" indicator ----
@@ -8694,10 +8794,6 @@
     channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
       syncRaceRosterFromPresence();
       (leftPresences || []).forEach(p => { if (p && p.id) closeVoicePeer(p.id); });
-    });
-    channel.on('broadcast', { event: 'voice-signal' }, ({ payload }) => {
-      if (!payload || payload.to !== myId) return;
-      handleVoiceSignal(payload);
     });
 
     return new Promise((resolve, reject) => {
