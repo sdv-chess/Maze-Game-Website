@@ -4977,13 +4977,14 @@
   const MODE_STORAGE_KEY = 'deepDelveMode';
 
   // Light mode is independent of the maze THEMES above (those are the cave's
-  // color skins). It only relabels the page chrome — background, panels,
-  // borders, and body text — so every maze theme still reads as itself
-  // (accent colors, the maze canvas, and stone tones are untouched).
+  // color skins, driven by the theme's own canvas colors — not these CSS
+  // vars). This overrides the page-chrome surface/text variables so every
+  // maze theme's accent colors (teal/coral/violet/gold/amber) still show
+  // through, while buttons, panels, and body text get proper light contrast.
   const LIGHT_MODE_VARS = {
     '--bg': '#F5F3EE', '--panel': '#FFFFFF', '--panel-2': '#FBFAF7',
-    '--border': '#DDD9D0', '--text': '#1F2430', '--text-muted': '#5B6270',
-    '--text-faint': '#8B909C'
+    '--stone': '#ECE7DC', '--stone-light': '#E2DCCC', '--border': '#DDD9D0',
+    '--text': '#1F2430', '--text-muted': '#5B6270', '--text-faint': '#8B909C'
   };
 
   function isLightMode() { return state.mode === 'light'; }
