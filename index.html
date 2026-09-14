@@ -672,6 +672,51 @@
   }
   .size-btn.active .size-timer { color: var(--teal); opacity: 0.85; }
 
+  /* Reveal-all toggle — a single button that stands in for a box grid
+     (size/character/theme) until tapped. Tapping it reveals the full
+     grid of options below; picking one (or tapping again) collapses it
+     back down, so the screen doesn't show every option at once. */
+  .reveal-toggle {
+    width: 100%;
+    background: var(--stone);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 11px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .reveal-toggle:hover { background: var(--stone-light); }
+  .reveal-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .reveal-toggle.expanded { border-color: var(--teal); }
+  .reveal-toggle .reveal-current {
+    display: flex; align-items: center; gap: 8px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0;
+  }
+  .reveal-toggle .reveal-hint { color: var(--text-faint); font-size: 10.5px; }
+  .reveal-toggle .reveal-chevron {
+    flex: none; color: var(--text-muted); font-size: 11px;
+    transition: transform 0.15s ease;
+  }
+  .reveal-toggle.expanded .reveal-chevron { transform: rotate(180deg); }
+
+  /* The grids themselves stay hidden until their toggle is expanded. The
+     :not(.expanded) selector out-specifies the plain .sizes/.chars/.themes
+     display:grid rules above regardless of source order. */
+  .sizes:not(.expanded), .chars:not(.expanded), .themes:not(.expanded) { display: none; }
+  .sizes.expanded, .chars.expanded, .themes.expanded { margin-top: 4px; animation: revealDrop 0.15s ease; }
+  @keyframes revealDrop {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
   .stats-row .value.time-warning { color: var(--amber); }
   .stats-row .value.time-danger { color: var(--coral); animation: timePulse 1s ease-in-out infinite; }
   @keyframes timePulse {
@@ -1724,6 +1769,10 @@
       <!-- Size -->
       <div class="card">
         <h2>Maze size</h2>
+        <button type="button" class="reveal-toggle" id="sizeRevealToggle" aria-expanded="false" aria-controls="sizeSelect">
+          <span class="reveal-current" id="sizeRevealLabel">Choose a size</span>
+          <span class="reveal-chevron">▾</span>
+        </button>
         <div class="sizes" id="sizeSelect">
           <button class="size-btn" data-size="small">Small<span class="size-timer">⏱ 2:30 limit</span></button>
           <button class="size-btn" data-size="medium">Medium</button>
@@ -1803,6 +1852,10 @@
       <!-- Character -->
       <div class="card">
         <h2>Choose your explorer</h2>
+        <button type="button" class="reveal-toggle" id="charRevealToggle" aria-expanded="false" aria-controls="charSelect">
+          <span class="reveal-current" id="charRevealLabel">Choose an explorer</span>
+          <span class="reveal-chevron">▾</span>
+        </button>
         <div class="chars" id="charSelect"></div>
 
         <div class="custom-panel" id="customCharPanel">
@@ -1824,6 +1877,10 @@
           <span class="info-box-icon" aria-hidden="true">🔷</span>
           <span><b>Colorblind-friendly:</b> the <b>Clear Sight</b> theme swaps every red/green color pairing for a high-contrast blue/orange/yellow palette, so walls, trail, and the finish torch all stay distinguishable regardless of color vision. It's always free — no need to unlock it.</span>
         </div>
+        <button type="button" class="reveal-toggle" id="themeRevealToggle" aria-expanded="false" aria-controls="themeSelect">
+          <span class="reveal-current" id="themeRevealLabel">Choose a theme</span>
+          <span class="reveal-chevron">▾</span>
+        </button>
         <div class="themes" id="themeSelect"></div>
         <p class="field-note" id="themeNote">Pick a look for the cave — your choice is remembered on this device. More themes unlock as you solve every Level-mode level in order — skipping ahead doesn't count.</p>
       </div>
@@ -3041,17 +3098,23 @@
   const statTimeLabel = document.getElementById('statTimeLabel');
   const themeSelect = document.getElementById('themeSelect');
   const themeNote = document.getElementById('themeNote');
+  const themeRevealToggle = document.getElementById('themeRevealToggle');
+  const themeRevealLabel = document.getElementById('themeRevealLabel');
   const modeToggleBtn = document.getElementById('btnModeToggle');
   if (modeToggleBtn) {
     modeToggleBtn.addEventListener('click', () => applyMode(isLightMode() ? 'dark' : 'light'));
   }
   const THEME_NOTE_DEFAULT = 'Pick a look for the cave — your choice is remembered on this device. More themes unlock as you solve every Level-mode level in order — skipping ahead doesn\'t count.';
   const charSelect = document.getElementById('charSelect');
+  const charRevealToggle = document.getElementById('charRevealToggle');
+  const charRevealLabel = document.getElementById('charRevealLabel');
   const customCharPanel = document.getElementById('customCharPanel');
   const fileInput = document.getElementById('fileInput');
   const urlInput = document.getElementById('urlInput');
   const customCharNote = document.getElementById('customCharNote');
   const sizeSelect = document.getElementById('sizeSelect');
+  const sizeRevealToggle = document.getElementById('sizeRevealToggle');
+  const sizeRevealLabel = document.getElementById('sizeRevealLabel');
   const customSizePanel = document.getElementById('customSizePanel');
   const customWidth = document.getElementById('customWidth');
   const customHeight = document.getElementById('customHeight');
@@ -3068,6 +3131,28 @@
   const btnStartLevel = document.getElementById('btnStartLevel');
   const levelProgressCount = document.getElementById('levelProgressCount');
   const levelProgressFill = document.getElementById('levelProgressFill');
+
+  // ---------- Reveal-all toggles (size / char / theme) ----------
+  // Each of these grids starts hidden behind a single summary button;
+  // tapping it reveals every option at once. Picking an option (or
+  // tapping the toggle again) collapses the grid back down.
+  function setRevealExpanded(toggleBtn, grid, expanded) {
+    grid.classList.toggle('expanded', expanded);
+    toggleBtn.classList.toggle('expanded', expanded);
+    toggleBtn.setAttribute('aria-expanded', String(expanded));
+  }
+  function wireRevealToggle(toggleBtn, grid) {
+    toggleBtn.addEventListener('click', () => {
+      setRevealExpanded(toggleBtn, grid, !grid.classList.contains('expanded'));
+    });
+  }
+  function collapseReveal(toggleBtn, grid) {
+    setRevealExpanded(toggleBtn, grid, false);
+  }
+  wireRevealToggle(sizeRevealToggle, sizeSelect);
+  wireRevealToggle(charRevealToggle, charSelect);
+  wireRevealToggle(themeRevealToggle, themeSelect);
+
   const winOverlay = document.getElementById('winOverlay');
   const winIcon = document.getElementById('winIcon');
   const winStats = document.getElementById('winStats');
@@ -5266,6 +5351,7 @@
         applyTheme(theme.id);
         themeNote.textContent = THEME_NOTE_DEFAULT;
         themeNote.className = 'field-note';
+        collapseReveal(themeRevealToggle, themeSelect);
       });
       themeSelect.appendChild(btn);
     });
@@ -5274,7 +5360,12 @@
 
   function syncThemeButtons() {
     [...themeSelect.children].forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.id === state.theme);
+      const isActive = btn.dataset.id === state.theme;
+      btn.classList.toggle('active', isActive);
+      if (isActive) {
+        const theme = THEMES.find(t => t.id === state.theme);
+        if (theme) themeRevealLabel.textContent = `${theme.emoji} ${theme.name}`;
+      }
     });
   }
 
@@ -7927,6 +8018,7 @@
         state.character = chr.id;
         syncCharButtons();
         customCharPanel.classList.toggle('show', chr.id === 'custom');
+        if (chr.id !== 'custom') collapseReveal(charRevealToggle, charSelect);
         draw();
       });
       charSelect.appendChild(btn);
@@ -7937,7 +8029,9 @@
 
   function syncCharButtons() {
     [...charSelect.children].forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.id === state.character);
+      const isActive = btn.dataset.id === state.character;
+      btn.classList.toggle('active', isActive);
+      if (isActive) charRevealLabel.textContent = `${btn.textContent} ${btn.title}`;
     });
   }
 
@@ -7959,7 +8053,9 @@
   // ---------- UI wiring: size ----------
   function syncSizeButtons() {
     [...sizeSelect.children].forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.size === state.sizeKey);
+      const isActive = btn.dataset.size === state.sizeKey;
+      btn.classList.toggle('active', isActive);
+      if (isActive) sizeRevealLabel.textContent = btn.childNodes[0].textContent.trim();
     });
     customSizePanel.classList.toggle('show', state.sizeKey === 'custom');
     levelPanel.classList.toggle('show', state.sizeKey === 'level');
@@ -7993,10 +8089,12 @@
     if (btn.dataset.size === 'custom' || btn.dataset.size === 'level') {
       state.sizeKey = btn.dataset.size;
       syncSizeButtons();
+      collapseReveal(sizeRevealToggle, sizeSelect);
       return;
     }
     applyNewMaze(SIZES[btn.dataset.size].cols, SIZES[btn.dataset.size].rows, btn.dataset.size);
     syncSizeButtons();
+    collapseReveal(sizeRevealToggle, sizeSelect);
   });
 
   document.getElementById('btnGenerateCustom').addEventListener('click', () => {
