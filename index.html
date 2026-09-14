@@ -1039,6 +1039,29 @@
   .lb-empty { font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 18px 0; }
   .lb-own-rank { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 12px; color: var(--text-muted); text-align: center; }
 
+  /* Live-race text chat */
+  .race-chat { display: flex; flex-direction: column; gap: 6px; }
+  .race-chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .race-chat-log .lb-empty { padding: 8px 0; }
+  .race-chat-msg { font-size: 12.5px; line-height: 1.35; word-break: break-word; }
+  .race-chat-msg .rc-name { color: var(--teal); font-weight: 600; }
+  .race-chat-msg.me .rc-name { color: var(--violet); }
+  .race-chat-msg .rc-text { color: var(--text); margin-left: 4px; }
+  .race-chat-msg .rc-time { color: var(--text-faint); font-size: 10.5px; margin-left: 6px; }
+  .race-chat-form { display: flex; gap: 6px; }
+  .race-chat-input { flex: 1; min-width: 0; }
+  .race-chat-send { flex: none; }
+
   /* Live-race voice chat */
   .lb-mic { flex: none; font-size: 12px; width: 16px; text-align: center; opacity: 0.85; transition: transform 0.1s; }
   .lb-mic.muted { opacity: 0.4; }
@@ -1759,6 +1782,13 @@
             <button class="secondary" id="btnCopyRaceLink">🔗 Copy link</button>
           </div>
           <div id="raceRoster"><p class="lb-empty">Waiting for racers…</p></div>
+          <div class="race-chat" id="raceChatPanel">
+            <div class="race-chat-log" id="raceChatLog"><p class="lb-empty">No messages yet — say hi.</p></div>
+            <form class="race-chat-form" id="raceChatForm">
+              <input type="text" class="field race-chat-input" id="raceChatInput" placeholder="Message the room…" maxlength="240" autocomplete="off" />
+              <button type="submit" class="secondary race-chat-send" id="btnRaceChatSend">Send</button>
+            </form>
+          </div>
           <div class="voice-video-grid" id="voiceVideoGrid"></div>
           <div class="voice-row">
             <button class="secondary voice-toggle" id="btnToggleVoice">🎤 Join voice chat</button>
@@ -2987,6 +3017,9 @@
   const btnToggleCamera = document.getElementById('btnToggleCamera');
   const voiceNote = document.getElementById('voiceNote');
   const voiceVideoGrid = document.getElementById('voiceVideoGrid');
+  const raceChatLog = document.getElementById('raceChatLog');
+  const raceChatForm = document.getElementById('raceChatForm');
+  const raceChatInput = document.getElementById('raceChatInput');
   // Shows the width/height fields only when "Custom" is picked, same
   // pattern as the single-player custom size panel.
   function syncRaceCustomPanel() {
@@ -8136,6 +8169,7 @@
     raceActiveNote.textContent = waiting ? 'Connecting to the host…' : '';
     raceActiveNote.className = 'field-note';
     renderRaceRoster();
+    renderRaceChat();
     // Mid-race, the New maze / fog / braid / collectible toggles in
     // Actions would desync the room, and Challenge a friend duplicates
     // what the race roster's code/link buttons already do — so both are
@@ -8255,6 +8289,69 @@
     });
     html += '</div>';
     raceRosterEl.innerHTML = html;
+  }
+
+  // ---- Live-race text chat ----
+  // Plain text alongside the maze/voice/video — sent as a broadcast on the
+  // same per-room `race-${code}` channel used for presence and voice
+  // signaling, so it needs no extra connection and disappears the moment
+  // the race channel does. Kept as a capped local list (not persisted —
+  // there's no history once you leave, same as the voice chat).
+  const RACE_CHAT_MAX = 100;
+  let raceChatMessages = [];
+
+  function renderRaceChat() {
+    if (!raceChatLog) return;
+    if (!raceChatMessages.length) {
+      raceChatLog.innerHTML = '<p class="lb-empty">No messages yet — say hi.</p>';
+      return;
+    }
+    const wasScrolledToBottom = raceChatLog.scrollHeight - raceChatLog.scrollTop - raceChatLog.clientHeight < 24;
+    raceChatLog.innerHTML = raceChatMessages.map(m => {
+      const isMe = m.id === state.race.myId;
+      const time = new Date(m.at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `
+        <div class="race-chat-msg${isMe ? ' me' : ''}">
+          <span class="rc-name">${escapeHtml(m.name || 'Guest')}</span><span class="rc-text">${escapeHtml(m.text || '')}</span><span class="rc-time">${time}</span>
+        </div>`;
+    }).join('');
+    // Only auto-scroll if the reader was already at (or near) the bottom —
+    // don't yank them down to the newest message while they're scrolling
+    // back to read something earlier.
+    if (wasScrolledToBottom) raceChatLog.scrollTop = raceChatLog.scrollHeight;
+  }
+
+  function addRaceChatMessage(msg) {
+    if (!msg || !msg.text) return;
+    raceChatMessages.push(msg);
+    if (raceChatMessages.length > RACE_CHAT_MAX) raceChatMessages = raceChatMessages.slice(-RACE_CHAT_MAX);
+    renderRaceChat();
+  }
+
+  function resetRaceChat() {
+    raceChatMessages = [];
+    renderRaceChat();
+  }
+
+  function sendRaceChatMessage(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed || !state.race.active || !state.race.channel) return;
+    const msg = { id: state.race.myId, name: state.currentUser || 'Guest', text: trimmed.slice(0, 240), at: Date.now() };
+    // Broadcast channels here use { self: false } (see connectRaceChannel),
+    // so the sender never hears its own broadcast back — add it locally
+    // right away rather than waiting on a round trip that isn't coming.
+    addRaceChatMessage(msg);
+    state.race.channel.send({ type: 'broadcast', event: 'chat', payload: msg }).catch(() => {});
+  }
+
+  if (raceChatForm) {
+    raceChatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!raceChatInput) return;
+      sendRaceChatMessage(raceChatInput.value);
+      raceChatInput.value = '';
+      raceChatInput.focus();
+    });
   }
 
   // ---- Voice chat: signaling helpers ----
@@ -8770,6 +8867,7 @@
   function leaveRaceInternal() {
     leaveVoiceChat();
     stopRaceRosterTick();
+    resetRaceChat();
     if (state.race.channel) {
       try { state.race.channel.unsubscribe(); } catch (e) { /* already gone */ }
     }
@@ -8836,6 +8934,10 @@
 
     channel.on('broadcast', { event: 'request-info' }, () => {
       if (state.race.code === code && state.race.isHost) broadcastRoomInfo();
+    });
+    channel.on('broadcast', { event: 'chat' }, ({ payload }) => {
+      if (state.race.code !== code || !payload) return;
+      addRaceChatMessage(payload);
     });
     channel.on('broadcast', { event: 'room-info' }, ({ payload }) => {
       if (state.race.code !== code || state.race.mazeReceived || !payload) return;
