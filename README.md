@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo_icon.png" width="120" alt="Deep Delve logo">
+</p>
+
 # Deep Delve 🌀
 
 *A maze you carry with you.*
@@ -57,6 +61,9 @@ Friends similarly live in their own `friendships` table (a friendship involves t
 
 ```
 index.html                     # the entire app — markup, styles, and game logic
+logo_icon.svg                  # source logo/favicon (vector)
+logo_icon.png                  # logo, rendered as PNG (README image, apple-touch-icon)
+favicon-64.png                 # small PNG favicon fallback for browsers that don't render SVG icons
 daily_leaderboard_setup.sql    # one-time Supabase setup for the Daily Maze leaderboard
 friends_setup.sql              # one-time Supabase setup for the Friends feature
 ```
