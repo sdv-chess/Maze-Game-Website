@@ -36,7 +36,37 @@
     font-family: var(--font-mono);
     min-height: 100vh;
     padding: 28px 16px 60px;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
+
+  /* Light mode swaps the fixed dark radial-gradient anchor for the live
+     --bg variable, so the page reads as a flat light background instead
+     of the night-sky glow baked into the dark-mode gradient above. */
+  html.light body {
+    background: var(--bg);
+  }
+
+  .mode-toggle {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 500;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 17px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.15s ease;
+  }
+  .mode-toggle:hover { transform: scale(1.06); }
+  .mode-toggle:active { transform: scale(0.95); }
 
   /* Base (mobile/tablet) width. Screens that need to stay narrow (sign-in,
      setup, etc.) set their own inline max-width on this same class, and an
@@ -1417,6 +1447,7 @@
 </style>
 </head>
 <body>
+<button class="mode-toggle" id="btnModeToggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">🌙</button>
 
 <canvas id="ambientCanvas" aria-hidden="true"></canvas>
 
@@ -2961,6 +2992,10 @@
   const statTimeLabel = document.getElementById('statTimeLabel');
   const themeSelect = document.getElementById('themeSelect');
   const themeNote = document.getElementById('themeNote');
+  const modeToggleBtn = document.getElementById('btnModeToggle');
+  if (modeToggleBtn) {
+    modeToggleBtn.addEventListener('click', () => applyMode(isLightMode() ? 'dark' : 'light'));
+  }
   const THEME_NOTE_DEFAULT = 'Pick a look for the cave — your choice is remembered on this device. More themes unlock as you solve every Level-mode level in order — skipping ahead doesn\'t count.';
   const charSelect = document.getElementById('charSelect');
   const customCharPanel = document.getElementById('customCharPanel');
@@ -4939,6 +4974,48 @@
 
   // ---------- Theme ----------
   const THEME_STORAGE_KEY = 'deepDelveTheme';
+  const MODE_STORAGE_KEY = 'deepDelveMode';
+
+  // Light mode is independent of the maze THEMES above (those are the cave's
+  // color skins). It only relabels the page chrome — background, panels,
+  // borders, and body text — so every maze theme still reads as itself
+  // (accent colors, the maze canvas, and stone tones are untouched).
+  const LIGHT_MODE_VARS = {
+    '--bg': '#F5F3EE', '--panel': '#FFFFFF', '--panel-2': '#FBFAF7',
+    '--border': '#DDD9D0', '--text': '#1F2430', '--text-muted': '#5B6270',
+    '--text-faint': '#8B909C'
+  };
+
+  function isLightMode() { return state.mode === 'light'; }
+
+  // Re-applies the light overrides on top of whatever the active maze theme
+  // just set, since applyTheme() rewrites those same CSS variables from
+  // theme.vars every time it runs. Call this after any theme switch.
+  function applyModeOverrides() {
+    const target = isLightMode() ? LIGHT_MODE_VARS : currentTheme().vars;
+    Object.entries(LIGHT_MODE_VARS).forEach(([key]) => {
+      document.documentElement.style.setProperty(key, target[key]);
+    });
+    document.documentElement.classList.toggle('light', isLightMode());
+    if (modeToggleBtn) {
+      modeToggleBtn.textContent = isLightMode() ? '☀️' : '🌙';
+      const label = isLightMode() ? 'Switch to dark mode' : 'Switch to light mode';
+      modeToggleBtn.setAttribute('aria-label', label);
+      modeToggleBtn.title = label;
+    }
+  }
+
+  function applyMode(mode) {
+    state.mode = mode === 'light' ? 'light' : 'dark';
+    applyModeOverrides();
+    try { localStorage.setItem(MODE_STORAGE_KEY, state.mode); } catch (e) { /* storage unavailable — mode still applies for this session */ }
+  }
+
+  function loadInitialMode() {
+    let saved = null;
+    try { saved = localStorage.getItem(MODE_STORAGE_KEY); } catch (e) { /* storage unavailable */ }
+    applyMode(saved === 'light' ? 'light' : 'dark');
+  }
 
   function currentTheme() { return THEMES.find(t => t.id === state.theme) || THEMES[0]; }
 
@@ -4959,6 +5036,7 @@
     Object.entries(theme.vars).forEach(([key, val]) => {
       document.documentElement.style.setProperty(key, val);
     });
+    applyModeOverrides();
     const defaultCharId = THEME_DEFAULT_CHARACTER[theme.id];
     if (defaultCharId && CHARACTERS.some(c => c.id === defaultCharId)) {
       state.character = defaultCharId;
@@ -9284,6 +9362,7 @@
 
   // ---------- Init ----------
   loadInitialTheme();
+  loadInitialMode();
   buildThemeSelect();
   buildCharSelect();
   syncSizeButtons();
