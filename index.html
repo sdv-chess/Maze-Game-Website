@@ -353,6 +353,36 @@
     margin-left: 6px; vertical-align: middle;
   }
 
+  .token-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 16px; height: 16px; padding: 0 5px;
+    background: var(--gold); color: #2A1F03;
+    border-radius: 8px; font-size: 9.5px; font-weight: 700;
+    margin-left: 6px; vertical-align: middle;
+  }
+
+  .shop-balance-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .shop-balance-label { font-size: 13px; color: var(--text-muted); }
+  .shop-balance-amount { font-size: 20px; font-weight: 700; color: var(--gold); }
+  .shop-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .shop-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .shop-item-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .shop-item-icon { font-size: 20px; flex: none; }
+  .shop-item-text { min-width: 0; }
+  .shop-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .shop-item-desc { font-size: 11.5px; color: var(--text-faint); margin-top: 1px; }
+  .shop-buy { width: auto; padding: 8px 14px; font-size: 12.5px; flex: none; }
+  .shop-buy:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .friend-toast {
     position: fixed;
     left: 50%;
@@ -857,22 +887,6 @@
   .peek-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
   #btnPeek, #btnUnwind { width: auto; padding: 8px 14px; font-size: 12px; }
   #btnUnwind:disabled { opacity: 0.45; cursor: not-allowed; }
-
-  .token-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-  .token-balance {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 5px 12px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--gold);
-  }
-  .token-buy { width: auto; padding: 6px 12px; font-size: 11.5px; }
-  .token-buy:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .overlay {
     position: fixed;
@@ -1466,6 +1480,7 @@
       </div>
       <div style="display:flex; gap:8px; align-self:flex-start;">
         <button class="secondary" id="btnGoFriends" style="width:auto; padding:8px 14px;">👥 Friends<span class="friend-count-pill" id="friendReqPill" style="display:none;"></span></button>
+        <button class="secondary" id="btnGoShopMode" style="width:auto; padding:8px 14px;">🪙 Shop<span class="token-badge token-badge-count">0</span></button>
         <button class="secondary" id="btnModeToAccount" style="width:auto; padding:8px 14px;">⚙️ Account</button>
       </div>
     </header>
@@ -1575,6 +1590,55 @@
           </div>
           <p class="field-note" id="raceSetupNote"></p>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SHOP SCREEN ============ -->
+<div id="screenShop" class="screen" style="display:none;">
+  <div class="wrap" style="max-width:640px;">
+    <header>
+      <div>
+        <h1><span class="dot"></span>Deep Delve</h1>
+        <p class="tagline">Spend tokens on a little extra help.</p>
+      </div>
+      <button class="secondary" id="btnShopBack" style="width:auto; padding:8px 14px; align-self:flex-start;">← Back</button>
+    </header>
+    <div class="panel">
+      <div class="card">
+        <div class="shop-balance-row">
+          <span class="shop-balance-label">Your balance</span>
+          <span class="shop-balance-amount">🪙 <span id="shopTokenCount">0</span></span>
+        </div>
+        <p class="field-note">Everyone gets 10 free tokens the first time they play. Spend them here on extras for whatever maze you're currently solving — purchases apply to your current run and reset when you start a genuinely new maze.</p>
+      </div>
+
+      <div class="card">
+        <h2>🛍️ Items</h2>
+        <div class="shop-list" id="shopList">
+          <div class="shop-item">
+            <div class="shop-item-info">
+              <span class="shop-item-icon">👁️</span>
+              <div class="shop-item-text">
+                <div class="shop-item-name">Extra Peek</div>
+                <div class="shop-item-desc">See a couple more cells of the path ahead, right now.</div>
+              </div>
+            </div>
+            <button class="primary shop-buy" id="btnShopBuyPeek">🪙 1</button>
+          </div>
+          <div class="shop-item">
+            <div class="shop-item-info">
+              <span class="shop-item-icon">🔙</span>
+              <div class="shop-item-text">
+                <div class="shop-item-name">Extra Unwind</div>
+                <div class="shop-item-desc">Step back one more cell out of a dead end.</div>
+              </div>
+            </div>
+            <button class="primary shop-buy" id="btnShopBuyUnwind">🪙 1</button>
+          </div>
+        </div>
+        <p class="field-note" id="shopNote"></p>
       </div>
     </div>
   </div>
@@ -1719,6 +1783,7 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
         <button class="secondary" id="btnGoSetup" style="width:auto; padding:8px 14px;">🧩 Maze setup</button>
         <button class="secondary" id="btnGoMultiplayer" style="width:auto; padding:8px 14px;">🏁 Multiplayer</button>
+        <button class="secondary" id="btnGoShopGame" style="width:auto; padding:8px 14px;">🪙 Shop<span class="token-badge token-badge-count">0</span></button>
         <button class="secondary" id="btnInsights" style="width:auto; padding:8px 14px;">📊 Insights</button>
         <button class="secondary" id="btnGoFeedback" style="width:auto; padding:8px 14px;">✉️ Feedback</button>
         <button class="secondary" id="btnHowToPlay" style="width:auto; padding:8px 14px;">❓ How to play</button>
@@ -1753,12 +1818,7 @@
         <button class="secondary" id="btnPeek">👁️ Peek (1 left)</button>
         <button class="secondary" id="btnUnwind">🔙 Unwind (3 left)</button>
       </div>
-      <div class="token-row" id="tokenRow">
-        <span class="token-balance" id="tokenBalance">🪙 <span id="tokenCount">0</span></span>
-        <button class="secondary token-buy" id="btnBuyPeek" title="Spend 1 token for one more peek">🪙 +1 Peek</button>
-        <button class="secondary token-buy" id="btnBuyUnwind" title="Spend 1 token for one more unwind">🪙 +1 Unwind</button>
-      </div>
-      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving. Out of free peeks or unwinds? Spend a token for one more — everyone starts with 10.</p>
+      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving. Out of free peeks or unwinds? Visit the 🪙 Shop above to buy more.</p>
     </div>
 
     <div class="panel" id="gamePanel">
@@ -2975,9 +3035,10 @@
   const btnPeek = document.getElementById('btnPeek');
   let peekTimer = null;
   const btnUnwind = document.getElementById('btnUnwind');
-  const tokenCountEl = document.getElementById('tokenCount');
-  const btnBuyPeek = document.getElementById('btnBuyPeek');
-  const btnBuyUnwind = document.getElementById('btnBuyUnwind');
+  const shopTokenCountEl = document.getElementById('shopTokenCount');
+  const btnShopBuyPeek = document.getElementById('btnShopBuyPeek');
+  const btnShopBuyUnwind = document.getElementById('btnShopBuyUnwind');
+  const shopNote = document.getElementById('shopNote');
   const customUnwinds = document.getElementById('customUnwinds');
   const customUnwindsSuggest = document.getElementById('customUnwindsSuggest');
   const btnPause = document.getElementById('btnPause');
@@ -4674,41 +4735,44 @@
     const remaining = Math.max(0, state.peekLimit - state.peeksUsed);
     btnPeek.disabled = remaining <= 0;
     btnPeek.textContent = `👁️ Peek (${remaining} left)`;
-    syncTokenUI();
   }
 
-  // ---------- Tokens: spend 1 to buy one more peek/unwind ----------
-  // Only meaningful once the maze's free budget (peekLimit/unwindLimit) is
-  // used up — buying just tops that budget up by one and immediately uses
-  // it, rather than being a separate action. See usePeek()/doUnwind() above
-  // for the actual peek/unwind logic itself; buying just unlocks one more
-  // call to them.
-  function syncTokenUI() {
-    if (tokenCountEl) tokenCountEl.textContent = state.tokens;
-    const busy = state.won || state.lost || state.paused || state.falling || state.finishing || !state.cells.length;
-    if (btnBuyPeek) {
-      const peekRemaining = Math.max(0, state.peekLimit - state.peeksUsed);
-      btnBuyPeek.disabled = busy || state.tokens < 1 || peekRemaining > 0;
-    }
-    if (btnBuyUnwind) {
-      const unwindRemaining = Math.max(0, state.unwindLimit - state.unwindsUsed);
-      btnBuyUnwind.disabled = busy || state.tokens < 1 || unwindRemaining > 0 || state.pathLog.length <= 1;
-    }
+  // ---------- Tokens & Shop ----------
+  // A simple per-device wallet (see the load/saveTokens() near the top of
+  // Init) spendable on the Shop screen. Buying tops up the *current* maze's
+  // peek/unwind budget by one per token — it doesn't use the peek/unwind
+  // right away, just makes one more available via the normal Peek/Unwind
+  // buttons back in the maze, same as if it had been part of the maze's
+  // free budget to begin with.
+  function syncTokenBadges() {
+    document.querySelectorAll('.token-badge-count').forEach(el => { el.textContent = state.tokens; });
+  }
+
+  function renderShop() {
+    if (shopTokenCountEl) shopTokenCountEl.textContent = state.tokens;
+    if (btnShopBuyPeek) btnShopBuyPeek.disabled = state.tokens < 1;
+    if (btnShopBuyUnwind) btnShopBuyUnwind.disabled = state.tokens < 1;
+  }
+
+  function showShopNote(text, kind) {
+    if (!shopNote) return;
+    shopNote.textContent = text;
+    shopNote.className = 'field-note' + (kind ? ' ' + kind : '');
   }
 
   function buyPeek() {
-    if (state.tokens < 1) return;
-    if (state.peeksUsed < state.peekLimit) return; // free ones still available — nothing to buy yet
+    if (state.tokens < 1) { showShopNote("You're out of tokens.", 'error'); return; }
     state.tokens -= 1;
     state.peekLimit += 1;
     saveTokens();
-    usePeek(); // also calls syncPeekButton() -> syncTokenUI(), so the wallet/buttons update together
+    syncTokenBadges();
+    syncPeekButton();
+    renderShop();
+    showShopNote('Bought 1 extra peek — it\'s waiting for you back in the maze.', 'success');
   }
 
   function buyUnwind() {
-    if (state.tokens < 1) return;
-    if (state.unwindsUsed < state.unwindLimit) return; // free ones still available — nothing to buy yet
-    if (state.pathLog.length <= 1) return;
+    if (state.tokens < 1) { showShopNote("You're out of tokens.", 'error'); return; }
     state.tokens -= 1;
     state.unwindLimit += 1;
     // Also bump the base so restarting this same maze (which resets
@@ -4716,11 +4780,14 @@
     // purchase away — a genuinely new maze still resets both fresh.
     state.baseUnwindLimit += 1;
     saveTokens();
-    doUnwind(); // also calls syncUnwindButton() -> syncTokenUI()
+    syncTokenBadges();
+    syncUnwindButton();
+    renderShop();
+    showShopNote('Bought 1 extra unwind — it\'s waiting for you back in the maze.', 'success');
   }
 
-  if (btnBuyPeek) btnBuyPeek.addEventListener('click', buyPeek);
-  if (btnBuyUnwind) btnBuyUnwind.addEventListener('click', buyUnwind);
+  if (btnShopBuyPeek) btnShopBuyPeek.addEventListener('click', buyPeek);
+  if (btnShopBuyUnwind) btnShopBuyUnwind.addEventListener('click', buyUnwind);
 
   // ---------- Unwind (step back) ----------
   // Pops the most recent cell off the path log and moves the player back
@@ -4755,7 +4822,6 @@
     const canUse = remaining > 0 && state.pathLog.length > 1 && !state.won && !state.lost && !state.paused && !state.falling && !state.finishing;
     btnUnwind.disabled = !canUse;
     btnUnwind.textContent = `🔙 Unwind (${remaining} left)`;
-    syncTokenUI();
   }
 
   // ---------- Pause ----------
@@ -8005,6 +8071,7 @@
     mode: document.getElementById('screenMode'),
     friends: document.getElementById('screenFriends'),
     multiplayer: document.getElementById('screenMultiplayer'),
+    shop: document.getElementById('screenShop'),
     setup: document.getElementById('screenSetup'),
     game: document.getElementById('screenGame'),
   };
@@ -8055,10 +8122,12 @@
     isRestoringScreenFromHistory = false;
   });
 
+  let lastScreenBeforeShop = 'mode';
   function showScreen(name) {
     Object.keys(screenEls).forEach(key => {
       if (screenEls[key]) screenEls[key].style.display = (key === name) ? '' : 'none';
     });
+    if (name !== 'shop') lastScreenBeforeShop = name;
     if (name === 'signin') {
       renderAccountUI();
     } else if (name === 'setup') {
@@ -8095,6 +8164,8 @@
         leaveRaceInternal();
         showRaceSetupUI();
       }
+    } else if (name === 'shop') {
+      renderShop();
     }
     syncScreenHistoryState(name);
     window.scrollTo(0, 0);
@@ -8145,6 +8216,9 @@
   document.getElementById('btnMultiBack').addEventListener('click', () => showScreen('mode'));
   document.getElementById('btnGoFriends').addEventListener('click', () => showScreen('friends'));
   document.getElementById('btnFriendsBack').addEventListener('click', () => showScreen('mode'));
+  document.getElementById('btnGoShopMode').addEventListener('click', () => showScreen('shop'));
+  document.getElementById('btnGoShopGame').addEventListener('click', () => showScreen('shop'));
+  document.getElementById('btnShopBack').addEventListener('click', () => showScreen(lastScreenBeforeShop));
   // Lets a signed-in player log out directly from the maze screen, reusing
   // the same sign-out logic as the Account card. Progress is already saved
   // online after every solve, so logging out just needs to confirm and
@@ -9219,6 +9293,7 @@
   syncItemsButton();
   syncPeekButton();
   syncUnwindButton();
+  syncTokenBadges();
   syncPauseButton();
   renderAccountUI();
   renderAchievements();
