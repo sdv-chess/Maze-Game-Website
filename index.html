@@ -858,6 +858,22 @@
   #btnPeek, #btnUnwind { width: auto; padding: 8px 14px; font-size: 12px; }
   #btnUnwind:disabled { opacity: 0.45; cursor: not-allowed; }
 
+  .token-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .token-balance {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--gold);
+  }
+  .token-buy { width: auto; padding: 6px 12px; font-size: 11.5px; }
+  .token-buy:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .overlay {
     position: fixed;
     inset: 0;
@@ -1737,7 +1753,12 @@
         <button class="secondary" id="btnPeek">👁️ Peek (1 left)</button>
         <button class="secondary" id="btnUnwind">🔙 Unwind (3 left)</button>
       </div>
-      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving.</p>
+      <div class="token-row" id="tokenRow">
+        <span class="token-balance" id="tokenBalance">🪙 <span id="tokenCount">0</span></span>
+        <button class="secondary token-buy" id="btnBuyPeek" title="Spend 1 token for one more peek">🪙 +1 Peek</button>
+        <button class="secondary token-buy" id="btnBuyUnwind" title="Spend 1 token for one more unwind">🪙 +1 Unwind</button>
+      </div>
+      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving. Out of free peeks or unwinds? Spend a token for one more — everyone starts with 10.</p>
     </div>
 
     <div class="panel" id="gamePanel">
@@ -2350,6 +2371,8 @@
 
   const BRAID_PREF_KEY = 'deepDelveBraid';
   const ITEMS_PREF_KEY = 'deepDelveItems';
+  const TOKENS_STORAGE_KEY = 'deepDelveTokens';
+  const FREE_STARTER_TOKENS = 10;
 
   // Level mode: width and height grow together but at different, level-dependent
   // rates, so levels aren't always square — some run wide, some run tall.
@@ -2786,6 +2809,7 @@
     hasKey: false,
     visionBoostUntil: 0,
     baseUnwindLimit: 3,
+    tokens: 0,
     mmPulses: [],
     mazeReady: false,
     falling: false,
@@ -2951,6 +2975,9 @@
   const btnPeek = document.getElementById('btnPeek');
   let peekTimer = null;
   const btnUnwind = document.getElementById('btnUnwind');
+  const tokenCountEl = document.getElementById('tokenCount');
+  const btnBuyPeek = document.getElementById('btnBuyPeek');
+  const btnBuyUnwind = document.getElementById('btnBuyUnwind');
   const customUnwinds = document.getElementById('customUnwinds');
   const customUnwindsSuggest = document.getElementById('customUnwindsSuggest');
   const btnPause = document.getElementById('btnPause');
@@ -3658,6 +3685,30 @@
   try { state.fogOfWar = localStorage.getItem(FOG_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
   try { state.braidEnabled = localStorage.getItem(BRAID_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
   try { state.itemsEnabled = localStorage.getItem(ITEMS_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
+
+  // ---------- Tokens ----------
+  // A simple per-device wallet (not tied to an account, so it isn't synced
+  // across devices) — spendable on extra peeks/unwinds once a maze's free
+  // budget runs out. Every device gets a one-time grant of free starter
+  // tokens the very first time it ever loads the game; after that the
+  // balance just persists locally like the other preferences above.
+  try {
+    const storedTokens = localStorage.getItem(TOKENS_STORAGE_KEY);
+    if (storedTokens === null) {
+      state.tokens = FREE_STARTER_TOKENS;
+      localStorage.setItem(TOKENS_STORAGE_KEY, String(state.tokens));
+    } else {
+      state.tokens = Math.max(0, parseInt(storedTokens, 10) || 0);
+    }
+  } catch (e) {
+    // storage unavailable — still grant the starter tokens for this
+    // session, they just won't persist across reloads.
+    state.tokens = FREE_STARTER_TOKENS;
+  }
+  function saveTokens() {
+    try { localStorage.setItem(TOKENS_STORAGE_KEY, String(state.tokens)); } catch (e) { /* storage unavailable */ }
+  }
+
   let audioCtx = null;
   function getAudioCtx() {
     if (!soundEnabled) return null;
@@ -4623,7 +4674,53 @@
     const remaining = Math.max(0, state.peekLimit - state.peeksUsed);
     btnPeek.disabled = remaining <= 0;
     btnPeek.textContent = `👁️ Peek (${remaining} left)`;
+    syncTokenUI();
   }
+
+  // ---------- Tokens: spend 1 to buy one more peek/unwind ----------
+  // Only meaningful once the maze's free budget (peekLimit/unwindLimit) is
+  // used up — buying just tops that budget up by one and immediately uses
+  // it, rather than being a separate action. See usePeek()/doUnwind() above
+  // for the actual peek/unwind logic itself; buying just unlocks one more
+  // call to them.
+  function syncTokenUI() {
+    if (tokenCountEl) tokenCountEl.textContent = state.tokens;
+    const busy = state.won || state.lost || state.paused || state.falling || state.finishing || !state.cells.length;
+    if (btnBuyPeek) {
+      const peekRemaining = Math.max(0, state.peekLimit - state.peeksUsed);
+      btnBuyPeek.disabled = busy || state.tokens < 1 || peekRemaining > 0;
+    }
+    if (btnBuyUnwind) {
+      const unwindRemaining = Math.max(0, state.unwindLimit - state.unwindsUsed);
+      btnBuyUnwind.disabled = busy || state.tokens < 1 || unwindRemaining > 0 || state.pathLog.length <= 1;
+    }
+  }
+
+  function buyPeek() {
+    if (state.tokens < 1) return;
+    if (state.peeksUsed < state.peekLimit) return; // free ones still available — nothing to buy yet
+    state.tokens -= 1;
+    state.peekLimit += 1;
+    saveTokens();
+    usePeek(); // also calls syncPeekButton() -> syncTokenUI(), so the wallet/buttons update together
+  }
+
+  function buyUnwind() {
+    if (state.tokens < 1) return;
+    if (state.unwindsUsed < state.unwindLimit) return; // free ones still available — nothing to buy yet
+    if (state.pathLog.length <= 1) return;
+    state.tokens -= 1;
+    state.unwindLimit += 1;
+    // Also bump the base so restarting this same maze (which resets
+    // unwindLimit back to baseUnwindLimit) doesn't silently take the
+    // purchase away — a genuinely new maze still resets both fresh.
+    state.baseUnwindLimit += 1;
+    saveTokens();
+    doUnwind(); // also calls syncUnwindButton() -> syncTokenUI()
+  }
+
+  if (btnBuyPeek) btnBuyPeek.addEventListener('click', buyPeek);
+  if (btnBuyUnwind) btnBuyUnwind.addEventListener('click', buyUnwind);
 
   // ---------- Unwind (step back) ----------
   // Pops the most recent cell off the path log and moves the player back
@@ -4658,6 +4755,7 @@
     const canUse = remaining > 0 && state.pathLog.length > 1 && !state.won && !state.lost && !state.paused && !state.falling && !state.finishing;
     btnUnwind.disabled = !canUse;
     btnUnwind.textContent = `🔙 Unwind (${remaining} left)`;
+    syncTokenUI();
   }
 
   // ---------- Pause ----------
