@@ -4914,8 +4914,25 @@
     ctx.strokeStyle = themeCanvas.wall;
     ctx.lineWidth = Math.max(1.5, cellSize * 0.09);
     ctx.lineCap = 'round';
-    for (let y = 0; y < state.rows; y++) {
-      for (let x = 0; x < state.cols; x++) {
+    // Only walk cells actually within (or just outside) the visible scroll
+    // viewport — on a big/custom/level maze most cells are off-screen, and
+    // re-walking the whole grid every frame regardless was the single
+    // biggest cost in draw(). Falls back to the full grid if mazeScroll
+    // isn't available for some reason. A 1-cell margin avoids pop-in at
+    // the edges while scrolling/panning.
+    let xStart = 0, xEnd = state.cols - 1, yStart = 0, yEnd = state.rows - 1;
+    if (mazeScroll && cellSize > 0) {
+      xStart = Math.max(0, Math.floor(mazeScroll.scrollLeft / cellSize) - 1);
+      yStart = Math.max(0, Math.floor(mazeScroll.scrollTop / cellSize) - 1);
+      xEnd = Math.min(state.cols - 1, Math.ceil((mazeScroll.scrollLeft + mazeScroll.clientWidth) / cellSize) + 1);
+      yEnd = Math.min(state.rows - 1, Math.ceil((mazeScroll.scrollTop + mazeScroll.clientHeight) / cellSize) + 1);
+    }
+    // A single path for every wall segment in view, stroked once — instead
+    // of a beginPath()/stroke() pair per cell (thousands of extra canvas
+    // state changes per frame on a large maze).
+    ctx.beginPath();
+    for (let y = yStart; y <= yEnd; y++) {
+      for (let x = xStart; x <= xEnd; x++) {
         const c = state.cells[y * state.cols + x];
         // Between resetActiveMazeState() clearing state.cells and the next
         // maze actually finishing generation (e.g. mid sign-in, or while a
@@ -4925,14 +4942,13 @@
         // the render loop for good, not just this one frame.
         if (!c) continue;
         const px = x * cellSize, py = y * cellSize;
-        ctx.beginPath();
         if (c.N) { ctx.moveTo(px, py); ctx.lineTo(px + cellSize, py); }
         if (c.W) { ctx.moveTo(px, py); ctx.lineTo(px, py + cellSize); }
         if (c.E) { ctx.moveTo(px + cellSize, py); ctx.lineTo(px + cellSize, py + cellSize); }
         if (c.S) { ctx.moveTo(px, py + cellSize); ctx.lineTo(px + cellSize, py + cellSize); }
-        ctx.stroke();
       }
     }
+    ctx.stroke();
 
     ctx.strokeStyle = themeCanvas.border;
     ctx.lineWidth = Math.max(2, cellSize * 0.11);
@@ -8165,7 +8181,10 @@
     state.race.players = players;
     renderRaceRoster();
     syncVoicePeers();
-    draw();
+    // No manual draw() here — animLoop's own requestAnimationFrame already
+    // redraws every frame regardless, so an extra call here just piles more
+    // full-canvas work onto whatever moment happens to have lots of presence
+    // events landing at once (everyone moving/toggling camera in a race).
   }
 
   function raceElapsedSeconds() {
