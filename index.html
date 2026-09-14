@@ -410,8 +410,37 @@
   .shop-item-text { min-width: 0; }
   .shop-item-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
   .shop-item-desc { font-size: 11.5px; color: var(--text-faint); margin-top: 1px; }
+  .shop-item-owned { font-size: 11px; color: var(--teal); font-weight: 600; margin-top: 3px; }
   .shop-buy { width: auto; padding: 8px 14px; font-size: 12.5px; flex: none; }
   .shop-buy:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .stash-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-top: 10px;
+  }
+  .stash-panel-title { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+  .stash-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .stash-row-label { font-size: 12.5px; color: var(--text); flex: 1 1 auto; min-width: 120px; }
+  .stash-row-label b { color: var(--teal); }
+  .stash-qty {
+    width: 52px;
+    padding: 6px 8px;
+    font-size: 12.5px;
+    background: var(--stone);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    flex: none;
+  }
+  .stash-use-btn { width: auto; padding: 6px 12px; font-size: 12px; flex: none; }
+  .stash-use-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .friend-toast {
     position: fixed;
@@ -1642,7 +1671,7 @@
           <span class="shop-balance-label">Your balance</span>
           <span class="shop-balance-amount">🪙 <span id="shopTokenCount">0</span></span>
         </div>
-        <p class="field-note">Everyone gets 10 free tokens the first time they play. Spend them here on extras for whatever maze you're currently solving — purchases apply to your current run and reset when you start a genuinely new maze.</p>
+        <p class="field-note">Everyone gets 10 free tokens the first time they play. Spend them here to buy as many peeks and unwinds as you like — they're banked in your stash, and you choose how many to draw into whatever maze you're playing from the stash controls on the game screen.</p>
       </div>
 
       <div class="card">
@@ -1653,7 +1682,8 @@
               <span class="shop-item-icon">👁️</span>
               <div class="shop-item-text">
                 <div class="shop-item-name">Extra Peek</div>
-                <div class="shop-item-desc">See a couple more cells of the path ahead, right now.</div>
+                <div class="shop-item-desc">See a couple more cells of the path ahead. Banked until you choose to use it.</div>
+                <div class="shop-item-owned">Owned: <span id="shopOwnedPeek">0</span></div>
               </div>
             </div>
             <button class="primary shop-buy" id="btnShopBuyPeek">🪙 1</button>
@@ -1663,7 +1693,8 @@
               <span class="shop-item-icon">🔙</span>
               <div class="shop-item-text">
                 <div class="shop-item-name">Extra Unwind</div>
-                <div class="shop-item-desc">Step back one more cell out of a dead end.</div>
+                <div class="shop-item-desc">Step back one more cell out of a dead end. Banked until you choose to use it.</div>
+                <div class="shop-item-owned">Owned: <span id="shopOwnedUnwind">0</span></div>
               </div>
             </div>
             <button class="primary shop-buy" id="btnShopBuyUnwind">🪙 1</button>
@@ -1849,7 +1880,20 @@
         <button class="secondary" id="btnPeek">👁️ Peek (1 left)</button>
         <button class="secondary" id="btnUnwind">🔙 Unwind (3 left)</button>
       </div>
-      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving. Out of free peeks or unwinds? Visit the 🪙 Shop above to buy more.</p>
+      <div class="stash-panel" id="stashPanel" style="display:none;">
+        <div class="stash-panel-title">🎒 Your stash — draw banked items into this maze, the rest stay stacked</div>
+        <div class="stash-row">
+          <span class="stash-row-label">👁️ Peeks banked: <b id="stashPeekOwned">0</b></span>
+          <input type="number" class="stash-qty" id="stashPeekInput" min="0" value="0" aria-label="Number of banked peeks to use" />
+          <button class="secondary stash-use-btn" id="btnUseStashPeek">Use</button>
+        </div>
+        <div class="stash-row">
+          <span class="stash-row-label">🔙 Unwinds banked: <b id="stashUnwindOwned">0</b></span>
+          <input type="number" class="stash-qty" id="stashUnwindInput" min="0" value="0" aria-label="Number of banked unwinds to use" />
+          <button class="secondary stash-use-btn" id="btnUseStashUnwind">Use</button>
+        </div>
+      </div>
+      <p class="hint">Arrow keys or WASD also work, and on touch you can swipe anywhere on the maze to move. Reach the amber torch to finish — you can't retrace your steps, so a dead end ends the run. Backspace (or the Unwind button) steps you back one cell — a limited, size-based budget that adjusts to the maze you're solving. Out of free peeks or unwinds? Visit the 🪙 Shop above to buy more, then draw them in from your stash above.</p>
     </div>
 
     <div class="panel" id="gamePanel">
@@ -2463,6 +2507,8 @@
   const BRAID_PREF_KEY = 'deepDelveBraid';
   const ITEMS_PREF_KEY = 'deepDelveItems';
   const TOKENS_STORAGE_KEY = 'deepDelveTokens';
+  const STASH_PEEK_STORAGE_KEY = 'deepDelveStashPeek';
+  const STASH_UNWIND_STORAGE_KEY = 'deepDelveStashUnwind';
   const FREE_STARTER_TOKENS = 10;
 
   // Level mode: width and height grow together but at different, level-dependent
@@ -2901,6 +2947,8 @@
     visionBoostUntil: 0,
     baseUnwindLimit: 3,
     tokens: 0,
+    stashPeek: 0,
+    stashUnwind: 0,
     mmPulses: [],
     mazeReady: false,
     falling: false,
@@ -3074,6 +3122,15 @@
   const btnShopBuyPeek = document.getElementById('btnShopBuyPeek');
   const btnShopBuyUnwind = document.getElementById('btnShopBuyUnwind');
   const shopNote = document.getElementById('shopNote');
+  const shopOwnedPeekEl = document.getElementById('shopOwnedPeek');
+  const shopOwnedUnwindEl = document.getElementById('shopOwnedUnwind');
+  const stashPanel = document.getElementById('stashPanel');
+  const stashPeekOwnedEl = document.getElementById('stashPeekOwned');
+  const stashUnwindOwnedEl = document.getElementById('stashUnwindOwned');
+  const stashPeekInput = document.getElementById('stashPeekInput');
+  const stashUnwindInput = document.getElementById('stashUnwindInput');
+  const btnUseStashPeek = document.getElementById('btnUseStashPeek');
+  const btnUseStashUnwind = document.getElementById('btnUseStashUnwind');
   const customUnwinds = document.getElementById('customUnwinds');
   const customUnwindsSuggest = document.getElementById('customUnwindsSuggest');
   const btnPause = document.getElementById('btnPause');
@@ -3803,6 +3860,25 @@
   }
   function saveTokens() {
     try { localStorage.setItem(TOKENS_STORAGE_KEY, String(state.tokens)); } catch (e) { /* storage unavailable */ }
+  }
+
+  // ---------- Stash ----------
+  // Purchased-but-not-yet-used peeks/unwinds. Buying in the Shop banks them
+  // here rather than applying them straight away, so tokens can be spent
+  // multiple times in a row to stack up a reserve. The player then chooses
+  // how many to draw out into the maze they're currently playing (see the
+  // "Your stash" controls on the game screen) — whatever they don't draw
+  // out stays banked for a future maze. Same per-device wallet pattern as
+  // tokens: not tied to an account, so it isn't synced across devices.
+  try {
+    state.stashPeek = Math.max(0, parseInt(localStorage.getItem(STASH_PEEK_STORAGE_KEY), 10) || 0);
+    state.stashUnwind = Math.max(0, parseInt(localStorage.getItem(STASH_UNWIND_STORAGE_KEY), 10) || 0);
+  } catch (e) { /* storage unavailable — stash just won't persist across reloads */ }
+  function saveStash() {
+    try {
+      localStorage.setItem(STASH_PEEK_STORAGE_KEY, String(state.stashPeek));
+      localStorage.setItem(STASH_UNWIND_STORAGE_KEY, String(state.stashUnwind));
+    } catch (e) { /* storage unavailable */ }
   }
 
   let audioCtx = null;
@@ -4774,11 +4850,13 @@
 
   // ---------- Tokens & Shop ----------
   // A simple per-device wallet (see the load/saveTokens() near the top of
-  // Init) spendable on the Shop screen. Buying tops up the *current* maze's
-  // peek/unwind budget by one per token — it doesn't use the peek/unwind
-  // right away, just makes one more available via the normal Peek/Unwind
-  // buttons back in the maze, same as if it had been part of the maze's
-  // free budget to begin with.
+  // Init) spendable on the Shop screen. Buying banks the item in the
+  // player's stash rather than applying it right away — tokens can be
+  // spent over and over to stack up a reserve of peeks/unwinds. Drawing
+  // items out of the stash into whatever maze is currently being played
+  // happens separately, from the "Your stash" controls on the game screen
+  // (see useStashPeek/useStashUnwind below), so the player picks exactly
+  // how many to bring into this run and the rest stays banked.
   function syncTokenBadges() {
     document.querySelectorAll('.token-badge-count').forEach(el => { el.textContent = state.tokens; });
   }
@@ -4787,6 +4865,8 @@
     if (shopTokenCountEl) shopTokenCountEl.textContent = state.tokens;
     if (btnShopBuyPeek) btnShopBuyPeek.disabled = state.tokens < 1;
     if (btnShopBuyUnwind) btnShopBuyUnwind.disabled = state.tokens < 1;
+    if (shopOwnedPeekEl) shopOwnedPeekEl.textContent = state.stashPeek;
+    if (shopOwnedUnwindEl) shopOwnedUnwindEl.textContent = state.stashUnwind;
   }
 
   function showShopNote(text, kind) {
@@ -4798,31 +4878,89 @@
   function buyPeek() {
     if (state.tokens < 1) { showShopNote("You're out of tokens.", 'error'); return; }
     state.tokens -= 1;
-    state.peekLimit += 1;
+    state.stashPeek += 1;
     saveTokens();
+    saveStash();
     syncTokenBadges();
-    syncPeekButton();
     renderShop();
-    showShopNote('Bought 1 extra peek — it\'s waiting for you back in the maze.', 'success');
+    syncStashControls();
+    showShopNote(`Bought 1 extra peek — you now have ${state.stashPeek} banked. Use them from the maze screen.`, 'success');
   }
 
   function buyUnwind() {
     if (state.tokens < 1) { showShopNote("You're out of tokens.", 'error'); return; }
     state.tokens -= 1;
-    state.unwindLimit += 1;
-    // Also bump the base so restarting this same maze (which resets
-    // unwindLimit back to baseUnwindLimit) doesn't silently take the
-    // purchase away — a genuinely new maze still resets both fresh.
-    state.baseUnwindLimit += 1;
+    state.stashUnwind += 1;
     saveTokens();
+    saveStash();
     syncTokenBadges();
-    syncUnwindButton();
     renderShop();
-    showShopNote('Bought 1 extra unwind — it\'s waiting for you back in the maze.', 'success');
+    syncStashControls();
+    showShopNote(`Bought 1 extra unwind — you now have ${state.stashUnwind} banked. Use them from the maze screen.`, 'success');
   }
 
   if (btnShopBuyPeek) btnShopBuyPeek.addEventListener('click', buyPeek);
   if (btnShopBuyUnwind) btnShopBuyUnwind.addEventListener('click', buyUnwind);
+
+  // ---------- Stash (draw banked peeks/unwinds into the current maze) ----------
+  // Lets the player pick a quantity (up to what they own) and pull exactly
+  // that many out of their banked stash into the maze they're playing right
+  // now. Whatever's left over stays banked for a future maze.
+  function clampStashInput(input, owned) {
+    if (!input) return 0;
+    let n = parseInt(input.value, 10);
+    if (isNaN(n) || n < 0) n = 0;
+    if (n > owned) n = owned;
+    input.value = n;
+    return n;
+  }
+
+  function syncStashControls() {
+    if (stashPeekOwnedEl) stashPeekOwnedEl.textContent = state.stashPeek;
+    if (stashUnwindOwnedEl) stashUnwindOwnedEl.textContent = state.stashUnwind;
+    if (stashPeekInput) {
+      stashPeekInput.max = state.stashPeek;
+      clampStashInput(stashPeekInput, state.stashPeek);
+    }
+    if (stashUnwindInput) {
+      stashUnwindInput.max = state.stashUnwind;
+      clampStashInput(stashUnwindInput, state.stashUnwind);
+    }
+    if (btnUseStashPeek) btnUseStashPeek.disabled = state.stashPeek < 1;
+    if (btnUseStashUnwind) btnUseStashUnwind.disabled = state.stashUnwind < 1;
+    if (stashPanel) stashPanel.style.display = (state.stashPeek > 0 || state.stashUnwind > 0) ? '' : 'none';
+  }
+
+  function useStashPeek() {
+    const n = clampStashInput(stashPeekInput, state.stashPeek);
+    if (n < 1) return;
+    state.stashPeek -= n;
+    state.peekLimit += n;
+    saveStash();
+    syncPeekButton();
+    syncStashControls();
+    showShopNote(`Used ${n} peek${n === 1 ? '' : 's'} from your stash — ${state.stashPeek} left banked.`, 'success');
+  }
+
+  function useStashUnwind() {
+    const n = clampStashInput(stashUnwindInput, state.stashUnwind);
+    if (n < 1) return;
+    state.stashUnwind -= n;
+    state.unwindLimit += n;
+    // Also bump the base so restarting this same maze (which resets
+    // unwindLimit back to baseUnwindLimit) doesn't silently take the
+    // drawn-out unwinds away — a genuinely new maze still resets both fresh.
+    state.baseUnwindLimit += n;
+    saveStash();
+    syncUnwindButton();
+    syncStashControls();
+    showShopNote(`Used ${n} unwind${n === 1 ? '' : 's'} from your stash — ${state.stashUnwind} left banked.`, 'success');
+  }
+
+  if (btnUseStashPeek) btnUseStashPeek.addEventListener('click', useStashPeek);
+  if (btnUseStashUnwind) btnUseStashUnwind.addEventListener('click', useStashUnwind);
+  if (stashPeekInput) stashPeekInput.addEventListener('change', () => clampStashInput(stashPeekInput, state.stashPeek));
+  if (stashUnwindInput) stashUnwindInput.addEventListener('change', () => clampStashInput(stashUnwindInput, state.stashUnwind));
 
   // ---------- Unwind (step back) ----------
   // Pops the most recent cell off the path log and moves the player back
@@ -8228,6 +8366,7 @@
       resizeCanvas();
       draw();
       scrollToPlayer();
+      syncStashControls();
     } else if (name === 'friends') {
       renderFriendsUI();
     } else if (name === 'multiplayer') {
@@ -9373,6 +9512,7 @@
   syncItemsButton();
   syncPeekButton();
   syncUnwindButton();
+  syncStashControls();
   syncTokenBadges();
   syncPauseButton();
   renderAccountUI();
