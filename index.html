@@ -1092,10 +1092,55 @@
     display: flex;
     flex-direction: column;
   }
-  .help-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
-  .help-header h3 { margin: 0; font-size: 18px; }
+  .help-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .help-header h3 {
+    margin: 0; font-size: 15.5px; flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .help-header button { width: auto; padding: 6px 10px; flex: none; }
+
+  /* Hamburger button that opens the page list — tap it to see every page
+     in the manual by name and jump straight to one, instead of scrolling
+     past sections you don't need. */
+  .help-menu-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; padding: 0 !important; border-radius: 9px;
+  }
+  .help-menu-btn .hamburger-icon { display: flex; flex-direction: column; gap: 3px; width: 16px; }
+  .help-menu-btn .hamburger-icon span { display: block; height: 2px; border-radius: 1px; background: var(--text); transition: transform 0.2s ease, opacity 0.2s ease; }
+  .help-menu-btn[aria-expanded="true"] .hamburger-icon span:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+  .help-menu-btn[aria-expanded="true"] .hamburger-icon span:nth-child(2) { opacity: 0; }
+  .help-menu-btn[aria-expanded="true"] .hamburger-icon span:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+
+  .help-page-count { font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); text-align: right; margin: -2px 0 10px; letter-spacing: 0.03em; }
+
+  /* The page list itself — collapsed to nothing until the hamburger opens
+     it, then expands in place above the manual's content. */
+  .help-nav { max-height: 0; overflow: hidden; border-radius: 10px; background: var(--panel-2); border: 1px solid transparent; transition: max-height 0.25s ease, margin 0.25s ease, border-color 0.2s ease; margin-bottom: 0; }
+  .help-nav.open { max-height: 340px; overflow-y: auto; margin-bottom: 12px; border-color: var(--border); }
+  .help-nav-inner { padding: 6px; }
+  .help-nav-label { font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); padding: 6px 8px; }
+  .help-nav-item {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+    background: transparent; border: none; border-radius: 8px; padding: 9px 8px;
+    cursor: pointer; text-align: left; color: var(--text); font-family: var(--font-display);
+  }
+  .help-nav-item:hover { background: var(--stone-light); }
+  .help-nav-item.active { background: rgba(58, 219, 196, 0.12); }
+  .help-nav-item.active .help-nav-title { color: var(--teal); }
+  .help-nav-emoji { font-size: 16px; flex: none; }
+  .help-nav-text { display: flex; flex-direction: column; min-width: 0; }
+  .help-nav-title { font-size: 13px; letter-spacing: 0.02em; }
+  .help-nav-sub { font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); margin-top: 1px; letter-spacing: normal; text-transform: none; white-space: normal; }
+
   .help-body { overflow-y: auto; padding-right: 6px; margin-bottom: 14px; }
+  .help-page { display: none; }
+  .help-page.active { display: block; }
+  .help-page-intro {
+    background: rgba(58, 219, 196, 0.07); border: 1px solid var(--border); border-left: 3px solid var(--teal);
+    border-radius: 8px; padding: 9px 12px; margin: 0 0 14px; font-size: 12.5px; line-height: 1.5; color: var(--text);
+  }
+  .help-page-intro b { color: var(--teal); }
   .help-body section { margin-bottom: 14px; }
   .help-body section:last-child { margin-bottom: 0; }
   .help-body h4 {
@@ -1108,24 +1153,12 @@
   }
   .help-body p { color: var(--text-muted); font-size: 12.5px; margin: 0; line-height: 1.55; }
   .help-body .key { background: var(--stone-light); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; color: var(--text); }
-  .help-cat { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; background: var(--panel-2); }
-  .help-cat:last-child { margin-bottom: 0; }
-  .help-cat-header {
-    width: 100%; display: flex; align-items: center; gap: 10px;
-    background: transparent; border: none; padding: 12px 14px;
-    cursor: pointer; text-align: left; color: var(--text); font-family: var(--font-display);
+  .help-modal-actions { flex-wrap: nowrap; gap: 6px; }
+  .help-modal-actions .help-nav-arrow-btn { flex: 0 0 auto; min-width: 44px; }
+  .help-modal-actions .primary { flex: 1; }
+  @media (max-width: 420px) {
+    .help-modal-actions .help-nav-arrow-btn span.arrow-label { display: none; }
   }
-  .help-cat-header:hover { background: var(--stone-light); }
-  .help-cat-header .help-cat-emoji { font-size: 17px; flex: none; }
-  .help-cat-header .help-cat-title { flex: 1; font-size: 13.5px; letter-spacing: 0.02em; }
-  .help-cat-header .help-cat-sub { display: block; font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); margin-top: 2px; letter-spacing: normal; text-transform: none; }
-  .help-cat-header .help-cat-arrow { flex: none; font-size: 12px; color: var(--text-faint); transition: transform 0.2s ease; }
-  .help-cat.open .help-cat-header .help-cat-arrow { transform: rotate(90deg); }
-  .help-cat-body { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
-  .help-cat.open .help-cat-body { max-height: 2400px; }
-  .help-cat-body-inner { padding: 2px 14px 14px; }
-  .help-cat-body-inner section { margin-bottom: 14px; }
-  .help-cat-body-inner section:last-child { margin-bottom: 0; }
 
   /* Daily leaderboard */
   .modal.leaderboard-modal { max-width: 400px; }
@@ -2025,193 +2058,176 @@
 <div class="overlay" id="howToPlayOverlay">
   <div class="modal help-modal">
     <div class="help-header">
-      <h3>🧭 How to play Deep Delve</h3>
+      <button class="secondary help-menu-btn" id="btnHelpMenu" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Browse manual pages">
+        <span class="hamburger-icon"><span></span><span></span><span></span></span>
+      </button>
+      <h3 id="helpPageTitle">🎯 Basics</h3>
       <button class="secondary" id="btnHowToPlayClose" aria-label="Close">✕</button>
     </div>
-    <div class="help-body">
-      <div class="help-cat open" data-cat="basics">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">🎯</span>
-          <span class="help-cat-title">Basics<span class="help-cat-sub">Goal, controls, hints, dead ends</span></span>
-          <span class="help-cat-arrow">▶</span>
-        </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Goal</h4>
-              <p>Guide your explorer from the entrance in the top-left corner to the amber 🔥 torch in the bottom-right corner.</p>
-            </section>
-            <section>
-              <h4>Controls</h4>
-              <p>Tap the on-screen arrows, or use <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> / the arrow keys, to move one cell at a time. You can't retrace your steps — trying to move back onto the cell you just came from is blocked with a message, so plan your route forward.</p>
-            </section>
-            <section>
-              <h4>Hints &amp; Unwind</h4>
-              <p>Tap "👁️ Peek" to briefly light up the way forward from where you're standing. Tap "🔙 Unwind" (or press <span class="key">Backspace</span>) to step back one cell — the one deliberate exception to the no-retracing rule. Both are limited: each maze grants a set number of uses, scaled to its size, so bigger mazes give you a bigger budget. Custom mazes let you set your own Hints and Unwinds counts when you generate them. Using either still counts toward your move total, and stepping into a dead end still permanently rules out a "clean" run even if you unwind back out of it.</p>
-            </section>
-            <section>
-              <h4>Dead ends</h4>
-              <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze.</p>
-              <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> sprinkle torches (a temporary bigger fog radius) and unwind crystals (+1 unwind) into dead ends as bonus loot — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
-            </section>
-          </div>
-        </div>
-      </div>
+    <div class="help-page-count" id="helpPageCount">Page 1 of 8</div>
 
-      <div class="help-cat" data-cat="mazetypes">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">🧩</span>
-          <span class="help-cat-title">Maze types<span class="help-cat-sub">Sizes, custom mazes, Level mode</span></span>
-          <span class="help-cat-arrow">▶</span>
+    <!-- Tapping the hamburger above opens this list. Every page in the
+         manual is named here — tap one to jump straight to it. -->
+    <div class="help-nav" id="helpNav">
+      <div class="help-nav-inner">
+        <div class="help-nav-label">Jump to a page</div>
+        <button class="help-nav-item" type="button" data-page="basics">
+          <span class="help-nav-emoji">🎯</span>
+          <span class="help-nav-text"><span class="help-nav-title">Basics</span><span class="help-nav-sub">Goal, controls, hints, dead ends</span></span>
         </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Sizes &amp; custom mazes</h4>
-              <p>Pick Small, Medium or Large in the size panel, or choose Custom and set your own width and height (5–300 cells per side). However big the maze, each cell is always drawn at a fixed, legible size — if the maze is bigger than the window, the maze view scrolls instead of shrinking cells down to invisible specks. A small hint appears under the maze whenever that's the case.</p>
-            </section>
-            <section>
-              <h4>Level mode</h4>
-              <p>Choose "Level" in the size panel to play through an endless staircase of mazes that gets bigger and tougher every time. Level 1 starts small and square; from there, width and height grow at different rates level to level, so you'll get wide levels, tall levels, and everything in between rather than a plain square every time. By the higher levels the mazes are comfortably past 100 cells on a side.</p>
-              <p>Use "◀ Prev level" / "Next level ▶" to step through levels, or type a number into "Jump to level #" and tap "Go" to skip straight to it, then tap "Start Level" to generate it. After solving a level maze, the win screen offers a "Next level ▶" button to immediately move on to the next, harder maze. As with any large maze, the view scrolls to follow your character rather than shrinking cells away.</p>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-cat" data-cat="saving">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">💾</span>
-          <span class="help-cat-title">Saving your progress<span class="help-cat-sub">Accounts, history</span></span>
-          <span class="help-cat-arrow">▶</span>
+        <button class="help-nav-item" type="button" data-page="mazetypes">
+          <span class="help-nav-emoji">🧩</span>
+          <span class="help-nav-text"><span class="help-nav-title">Maze types</span><span class="help-nav-sub">Sizes, custom mazes, Level mode</span></span>
         </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Accounts &amp; history</h4>
-              <p>Create an account to track your solved mazes and badges, and to pick a maze back up right where you left it. Your solve history is grouped by maze category — Small, Medium, Large, Custom and Level Mode are all kept separate, so your custom-size solves and your Level mode progress never get mixed together.</p>
-            </section>
-            <section>
-              <h4>Your account — quick steps</h4>
-              <p>Your account, badges, history and in-progress maze are all saved online under your username.</p>
-              <p>1. In the Account card, type a username and password and tap <b>Create account</b>.</p>
-              <p>2. That's it — every solve, and your current maze, is saved to your account automatically as you play. No codes to copy or files to manage.</p>
-              <p>3. Coming back later, on this device or a new one: just sign in with the same username and password, and everything picks up right where you left off.</p>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-cat" data-cat="multiplayer">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">🏁</span>
-          <span class="help-cat-title">Multiplayer<span class="help-cat-sub">Live races against a friend</span></span>
-          <span class="help-cat-arrow">▶</span>
+        <button class="help-nav-item" type="button" data-page="saving">
+          <span class="help-nav-emoji">💾</span>
+          <span class="help-nav-text"><span class="help-nav-title">Saving your progress</span><span class="help-nav-sub">Accounts, history</span></span>
         </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Hosting or joining a race</h4>
-              <p>Tap "🏁 Multiplayer" in the header to open the race screen. Pick a size and tap "Host a race" to get a room code, or type a friend's code into "Join race" to jump into theirs. Races run without fog of war, braided paths, or collectibles, so everyone's cave is identical and the run stays fair.</p>
-            </section>
-            <section>
-              <h4>Racing live</h4>
-              <p>Everyone in the room solves the exact same maze at the same time, and you can see each other moving through it as you go — first to the torch wins. The sidebar's "Live race" card shows the room code, buttons to copy the code or a shareable link, and a roster with each racer's live move count.</p>
-            </section>
-            <section>
-              <h4>The sidebar while racing</h4>
-              <p>Once a race is under way, "Live race" moves to the top of the sidebar, and the Actions and Challenge a friend cards are hidden — new mazes, fog/braid/collectible toggles, and challenge links don't apply mid-race, so they're tucked away until you're back to solo play.</p>
-            </section>
-            <section>
-              <h4>Leaving a race</h4>
-              <p>Tap "🚪 Leave race" in the Live race card, or tap the header button — it reads "🧍 Single player" while you're racing — to drop out and return to solo setup. You just disappear from the roster; anyone else still in the room keeps racing without you.</p>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-cat" data-cat="challenge">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">📤</span>
-          <span class="help-cat-title">Challenge a friend<span class="help-cat-sub">Send someone the exact same maze</span></span>
-          <span class="help-cat-arrow">▶</span>
+        <button class="help-nav-item" type="button" data-page="multiplayer">
+          <span class="help-nav-emoji">🏁</span>
+          <span class="help-nav-text"><span class="help-nav-title">Multiplayer</span><span class="help-nav-sub">Live races against a friend</span></span>
         </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Sending a challenge</h4>
-              <p>Under "Challenge a friend", tap "📤 Send challenge" to pack your current maze layout — walls and settings, but no progress — into a link and hand it straight to your device's share sheet, so you can send it through whatever app you like. If your device or browser doesn't support that share sheet, the link is copied to your clipboard instead, ready to paste anywhere.</p>
-            </section>
-            <section>
-              <h4>If sharing doesn't go through</h4>
-              <p>The link is still shown in the box below the button either way, so if you closed the share sheet or your browser doesn't support it, you can select the text yourself and copy it manually to send it another way.</p>
-            </section>
-            <section>
-              <h4>Opening a challenge</h4>
-              <p>Whoever opens the link lands on the sign-in screen first, with the challenge maze already waiting. Once they sign in or create an account, the very next screen drops them straight into the exact same maze layout you sent, from square one — and their solve gets saved to their history and counts toward their badges.</p>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-cat" data-cat="replay">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">📺</span>
-          <span class="help-cat-title">Replay &amp; practice<span class="help-cat-sub">Rewatch and practice past solves</span></span>
-          <span class="help-cat-arrow">▶</span>
+        <button class="help-nav-item" type="button" data-page="challenge">
+          <span class="help-nav-emoji">📤</span>
+          <span class="help-nav-text"><span class="help-nav-title">Challenge a friend</span><span class="help-nav-sub">Send someone the exact same maze</span></span>
         </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Replay &amp; practice</h4>
-              <p>From your history, tap "▶ Replay & play" on any solved maze to step or play back your recorded run. Then click anywhere inside the maze to drop your character at that spot and move from there yourself — your practice path lights up red, separate from the recorded run. Backtracking rules don't apply here, so feel free to explore freely.</p>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-cat" data-cat="collecting">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">🏅</span>
-          <span class="help-cat-title">Collecting<span class="help-cat-sub">Badges, flair, themes</span></span>
-          <span class="help-cat-arrow">▶</span>
+        <button class="help-nav-item" type="button" data-page="replay">
+          <span class="help-nav-emoji">📺</span>
+          <span class="help-nav-text"><span class="help-nav-title">Replay &amp; practice</span><span class="help-nav-sub">Rewatch and practice past solves</span></span>
         </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Badges</h4>
-              <p>Earn badges for milestones, speed runs, flawless solves, Level mode progress and more. Tap any badge in the Badges panel to see its full name, rank and requirements, whether it's unlocked or not. The rarest one, "Deep Completionist," unlocks only once you've solved every single level from 1 through 100 — none skipped.</p>
-            </section>
-            <section>
-              <h4>Themes</h4>
-              <p>Pick a look for the cave from the Theme panel — every color in the maze and the interface switches with it. Your pick is remembered on this device, whether or not you're signed in.</p>
-              <p>Five themes are free from the start, plus a sixth, always-free Clear Sight theme built for colorblind accessibility — it swaps every red/green-dependent color pairing for a blue/orange/yellow palette with strong contrast, so walls, trail, and the finish marker stay distinguishable regardless of color vision. The rest are locked (🔒) behind Level mode, and they unlock strictly in order: a locked theme only opens up once you've <b>solved every single level from 1 up to its unlock number, with none skipped</b>. Jumping straight to a high level and solving it does not unlock anything by itself — you have to clear each level along the way first. Tap a locked theme to see exactly which level you still need.</p>
-            </section>
-            <section>
-              <h4>Flair</h4>
-              <p>Every badge you unlock also becomes a flair. Open the Flair panel and tap one to equip it beside your username in the Account card — tap it again (or "None") to remove it. Your equipped flair is saved with your account.</p>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <div class="help-cat" data-cat="settings">
-        <button class="help-cat-header" type="button">
-          <span class="help-cat-emoji">⚙️</span>
-          <span class="help-cat-title">Settings<span class="help-cat-sub">Sound</span></span>
-          <span class="help-cat-arrow">▶</span>
+        <button class="help-nav-item" type="button" data-page="collecting">
+          <span class="help-nav-emoji">🏅</span>
+          <span class="help-nav-text"><span class="help-nav-title">Collecting</span><span class="help-nav-sub">Badges, flair, themes</span></span>
         </button>
-        <div class="help-cat-body">
-          <div class="help-cat-body-inner">
-            <section>
-              <h4>Sound</h4>
-              <p>A soft tick plays with each step, a chime when you reach the torch, and a low tone if you hit a dead end. Tap "🔊 Sound: On" in the Actions card to mute or unmute — your choice is remembered on this device.</p>
-            </section>
-          </div>
-        </div>
+        <button class="help-nav-item" type="button" data-page="settings">
+          <span class="help-nav-emoji">⚙️</span>
+          <span class="help-nav-text"><span class="help-nav-title">Settings</span><span class="help-nav-sub">Sound</span></span>
+        </button>
       </div>
     </div>
-    <div class="modal-actions">
+
+    <div class="help-body" id="helpBody">
+      <div class="help-page" data-page="basics">
+        <p class="help-page-intro"><b>In short:</b> get from the entrance to the torch, one cell at a time, without retracing your steps — Peek and Unwind are your safety net.</p>
+        <section>
+          <h4>Goal</h4>
+          <p>Guide your explorer from the entrance in the top-left corner to the amber 🔥 torch in the bottom-right corner.</p>
+        </section>
+        <section>
+          <h4>Controls</h4>
+          <p>Tap the on-screen arrows, or use <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> / the arrow keys, to move one cell at a time. You can't retrace your steps — trying to move back onto the cell you just came from is blocked with a message, so plan your route forward.</p>
+        </section>
+        <section>
+          <h4>Hints &amp; Unwind</h4>
+          <p>Tap "👁️ Peek" to briefly light up the way forward from where you're standing. Tap "🔙 Unwind" (or press <span class="key">Backspace</span>) to step back one cell — the one deliberate exception to the no-retracing rule. Both are limited: each maze grants a set number of uses, scaled to its size, so bigger mazes give you a bigger budget. Custom mazes let you set your own Hints and Unwinds counts when you generate them. Using either still counts toward your move total, and stepping into a dead end still permanently rules out a "clean" run even if you unwind back out of it.</p>
+        </section>
+        <section>
+          <h4>Dead ends</h4>
+          <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze.</p>
+          <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> sprinkle torches (a temporary bigger fog radius) and unwind crystals (+1 unwind) into dead ends as bonus loot — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
+        </section>
+      </div>
+
+      <div class="help-page" data-page="mazetypes">
+        <p class="help-page-intro"><b>In short:</b> pick a size (or go Custom), or switch to Level mode for an endless run of bigger, tougher mazes.</p>
+        <section>
+          <h4>Sizes &amp; custom mazes</h4>
+          <p>Pick Small, Medium or Large in the size panel, or choose Custom and set your own width and height (5–300 cells per side). However big the maze, each cell is always drawn at a fixed, legible size — if the maze is bigger than the window, the maze view scrolls instead of shrinking cells down to invisible specks. A small hint appears under the maze whenever that's the case.</p>
+        </section>
+        <section>
+          <h4>Level mode</h4>
+          <p>Choose "Level" in the size panel to play through an endless staircase of mazes that gets bigger and tougher every time. Level 1 starts small and square; from there, width and height grow at different rates level to level, so you'll get wide levels, tall levels, and everything in between rather than a plain square every time. By the higher levels the mazes are comfortably past 100 cells on a side.</p>
+          <p>Use "◀ Prev level" / "Next level ▶" to step through levels, or type a number into "Jump to level #" and tap "Go" to skip straight to it, then tap "Start Level" to generate it. After solving a level maze, the win screen offers a "Next level ▶" button to immediately move on to the next, harder maze. As with any large maze, the view scrolls to follow your character rather than shrinking cells away.</p>
+        </section>
+      </div>
+
+      <div class="help-page" data-page="saving">
+        <p class="help-page-intro"><b>In short:</b> create a free account and everything — solves, badges, your maze in progress — saves automatically under your username.</p>
+        <section>
+          <h4>Accounts &amp; history</h4>
+          <p>Create an account to track your solved mazes and badges, and to pick a maze back up right where you left it. Your solve history is grouped by maze category — Small, Medium, Large, Custom and Level Mode are all kept separate, so your custom-size solves and your Level mode progress never get mixed together.</p>
+        </section>
+        <section>
+          <h4>Your account — quick steps</h4>
+          <p>Your account, badges, history and in-progress maze are all saved online under your username.</p>
+          <p>1. In the Account card, type a username and password and tap <b>Create account</b>.</p>
+          <p>2. That's it — every solve, and your current maze, is saved to your account automatically as you play. No codes to copy or files to manage.</p>
+          <p>3. Coming back later, on this device or a new one: just sign in with the same username and password, and everything picks up right where you left off.</p>
+        </section>
+      </div>
+
+      <div class="help-page" data-page="multiplayer">
+        <p class="help-page-intro"><b>In short:</b> host or join a race for a room code, then everyone solves the exact same maze at the same time — first to the torch wins.</p>
+        <section>
+          <h4>Hosting or joining a race</h4>
+          <p>Tap "🏁 Multiplayer" in the header to open the race screen. Pick a size and tap "Host a race" to get a room code, or type a friend's code into "Join race" to jump into theirs. Races run without fog of war, braided paths, or collectibles, so everyone's cave is identical and the run stays fair.</p>
+        </section>
+        <section>
+          <h4>Racing live</h4>
+          <p>Everyone in the room solves the exact same maze at the same time, and you can see each other moving through it as you go — first to the torch wins. The sidebar's "Live race" card shows the room code, buttons to copy the code or a shareable link, and a roster with each racer's live move count.</p>
+        </section>
+        <section>
+          <h4>The sidebar while racing</h4>
+          <p>Once a race is under way, "Live race" moves to the top of the sidebar, and the Actions and Challenge a friend cards are hidden — new mazes, fog/braid/collectible toggles, and challenge links don't apply mid-race, so they're tucked away until you're back to solo play.</p>
+        </section>
+        <section>
+          <h4>Leaving a race</h4>
+          <p>Tap "🚪 Leave race" in the Live race card, or tap the header button — it reads "🧍 Single player" while you're racing — to drop out and return to solo setup. You just disappear from the roster; anyone else still in the room keeps racing without you.</p>
+        </section>
+      </div>
+
+      <div class="help-page" data-page="challenge">
+        <p class="help-page-intro"><b>In short:</b> send a friend your exact maze layout as a link — no progress, just the walls — and they'll drop into the same puzzle from scratch.</p>
+        <section>
+          <h4>Sending a challenge</h4>
+          <p>Under "Challenge a friend", tap "📤 Send challenge" to pack your current maze layout — walls and settings, but no progress — into a link and hand it straight to your device's share sheet, so you can send it through whatever app you like. If your device or browser doesn't support that share sheet, the link is copied to your clipboard instead, ready to paste anywhere.</p>
+        </section>
+        <section>
+          <h4>If sharing doesn't go through</h4>
+          <p>The link is still shown in the box below the button either way, so if you closed the share sheet or your browser doesn't support it, you can select the text yourself and copy it manually to send it another way.</p>
+        </section>
+        <section>
+          <h4>Opening a challenge</h4>
+          <p>Whoever opens the link lands on the sign-in screen first, with the challenge maze already waiting. Once they sign in or create an account, the very next screen drops them straight into the exact same maze layout you sent, from square one — and their solve gets saved to their history and counts toward their badges.</p>
+        </section>
+      </div>
+
+      <div class="help-page" data-page="replay">
+        <p class="help-page-intro"><b>In short:</b> rewatch any solved maze step by step, then click inside it to practice your own route freely.</p>
+        <section>
+          <h4>Replay &amp; practice</h4>
+          <p>From your history, tap "▶ Replay & play" on any solved maze to step or play back your recorded run. Then click anywhere inside the maze to drop your character at that spot and move from there yourself — your practice path lights up red, separate from the recorded run. Backtracking rules don't apply here, so feel free to explore freely.</p>
+        </section>
+      </div>
+
+      <div class="help-page" data-page="collecting">
+        <p class="help-page-intro"><b>In short:</b> earn badges by playing, unlock themes strictly in Level-mode order, and equip any badge as flair beside your name.</p>
+        <section>
+          <h4>Badges</h4>
+          <p>Earn badges for milestones, speed runs, flawless solves, Level mode progress and more. Tap any badge in the Badges panel to see its full name, rank and requirements, whether it's unlocked or not. The rarest one, "Deep Completionist," unlocks only once you've solved every single level from 1 through 100 — none skipped.</p>
+        </section>
+        <section>
+          <h4>Themes</h4>
+          <p>Pick a look for the cave from the Theme panel — every color in the maze and the interface switches with it. Your pick is remembered on this device, whether or not you're signed in.</p>
+          <p>Five themes are free from the start, plus a sixth, always-free Clear Sight theme built for colorblind accessibility — it swaps every red/green-dependent color pairing for a blue/orange/yellow palette with strong contrast, so walls, trail, and the finish marker stay distinguishable regardless of color vision. The rest are locked (🔒) behind Level mode, and they unlock strictly in order: a locked theme only opens up once you've <b>solved every single level from 1 up to its unlock number, with none skipped</b>. Jumping straight to a high level and solving it does not unlock anything by itself — you have to clear each level along the way first. Tap a locked theme to see exactly which level you still need.</p>
+        </section>
+        <section>
+          <h4>Flair</h4>
+          <p>Every badge you unlock also becomes a flair. Open the Flair panel and tap one to equip it beside your username in the Account card — tap it again (or "None") to remove it. Your equipped flair is saved with your account.</p>
+        </section>
+      </div>
+
+      <div class="help-page" data-page="settings">
+        <p class="help-page-intro"><b>In short:</b> a soft tick, chime, and dead-end tone play as you move — toggle the whole set on or off from the Actions card.</p>
+        <section>
+          <h4>Sound</h4>
+          <p>A soft tick plays with each step, a chime when you reach the torch, and a low tone if you hit a dead end. Tap "🔊 Sound: On" in the Actions card to mute or unmute — your choice is remembered on this device.</p>
+        </section>
+      </div>
+    </div>
+    <div class="modal-actions help-modal-actions">
+      <button class="secondary help-nav-arrow-btn" id="btnHelpPrev" type="button">◀ <span class="arrow-label">Prev</span></button>
+      <button class="secondary help-nav-arrow-btn" id="btnHelpNext" type="button"><span class="arrow-label">Next</span> ▶</button>
       <button class="primary" id="btnHowToPlayGotIt">Got it</button>
     </div>
   </div>
@@ -8304,18 +8320,80 @@
     setTimeout(() => { note.textContent = ''; }, 2500);
   });
 
-  document.getElementById('btnHowToPlay').addEventListener('click', () => howToPlayOverlay.classList.add('show'));
-  document.getElementById('btnHowToPlayClose').addEventListener('click', () => howToPlayOverlay.classList.remove('show'));
-  document.getElementById('btnHowToPlayGotIt').addEventListener('click', () => howToPlayOverlay.classList.remove('show'));
+  // The manual is a set of named pages (Basics, Maze types, Saving your
+  // progress, ...). The hamburger button opens a list of every page by
+  // name; tapping one jumps straight to it, closes the list, and updates
+  // the header title and "Page x of y" counter. Prev/Next step through
+  // the same order for anyone paging through top to bottom instead.
+  const helpPageOrder = ['basics', 'mazetypes', 'saving', 'multiplayer', 'challenge', 'replay', 'collecting', 'settings'];
+  const helpPageMeta = {
+    basics:      { emoji: '🎯', title: 'Basics' },
+    mazetypes:   { emoji: '🧩', title: 'Maze types' },
+    saving:      { emoji: '💾', title: 'Saving your progress' },
+    multiplayer: { emoji: '🏁', title: 'Multiplayer' },
+    challenge:   { emoji: '📤', title: 'Challenge a friend' },
+    replay:      { emoji: '📺', title: 'Replay & practice' },
+    collecting:  { emoji: '🏅', title: 'Collecting' },
+    settings:    { emoji: '⚙️', title: 'Settings' },
+  };
+  let helpCurrentPage = helpPageOrder[0];
+  const helpMenuBtn = document.getElementById('btnHelpMenu');
+  const helpNavPanel = document.getElementById('helpNav');
+  const helpPageTitleEl = document.getElementById('helpPageTitle');
+  const helpPageCountEl = document.getElementById('helpPageCount');
+  const helpBodyEl = document.getElementById('helpBody');
 
-  // How-to-play categories collapse/expand independently — tapping a header
-  // toggles just that section rather than replacing the whole manual, so
-  // players can jump straight to "Maze types" or "Saving your progress"
-  // without scrolling past everything else.
-  howToPlayOverlay.querySelectorAll('.help-cat-header').forEach(header => {
-    header.addEventListener('click', () => {
-      header.closest('.help-cat').classList.toggle('open');
+  function closeHelpNav() {
+    helpNavPanel.classList.remove('open');
+    helpMenuBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function showHelpPage(page) {
+    if (!helpPageMeta[page]) return;
+    helpCurrentPage = page;
+    howToPlayOverlay.querySelectorAll('.help-page').forEach(el => {
+      el.classList.toggle('active', el.dataset.page === page);
     });
+    howToPlayOverlay.querySelectorAll('.help-nav-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.page === page);
+    });
+    const meta = helpPageMeta[page];
+    helpPageTitleEl.textContent = `${meta.emoji} ${meta.title}`;
+    const idx = helpPageOrder.indexOf(page);
+    helpPageCountEl.textContent = `Page ${idx + 1} of ${helpPageOrder.length}`;
+    helpBodyEl.scrollTop = 0;
+    closeHelpNav();
+  }
+
+  helpMenuBtn.addEventListener('click', () => {
+    const open = helpNavPanel.classList.toggle('open');
+    helpMenuBtn.setAttribute('aria-expanded', String(open));
+  });
+
+  howToPlayOverlay.querySelectorAll('.help-nav-item').forEach(item => {
+    item.addEventListener('click', () => showHelpPage(item.dataset.page));
+  });
+
+  document.getElementById('btnHelpPrev').addEventListener('click', () => {
+    const idx = helpPageOrder.indexOf(helpCurrentPage);
+    showHelpPage(helpPageOrder[(idx - 1 + helpPageOrder.length) % helpPageOrder.length]);
+  });
+  document.getElementById('btnHelpNext').addEventListener('click', () => {
+    const idx = helpPageOrder.indexOf(helpCurrentPage);
+    showHelpPage(helpPageOrder[(idx + 1) % helpPageOrder.length]);
+  });
+
+  document.getElementById('btnHowToPlay').addEventListener('click', () => {
+    howToPlayOverlay.classList.add('show');
+    showHelpPage('basics');
+  });
+  document.getElementById('btnHowToPlayClose').addEventListener('click', () => {
+    howToPlayOverlay.classList.remove('show');
+    closeHelpNav();
+  });
+  document.getElementById('btnHowToPlayGotIt').addEventListener('click', () => {
+    howToPlayOverlay.classList.remove('show');
+    closeHelpNav();
   });
 
   // ---------- UI wiring: insights ----------
