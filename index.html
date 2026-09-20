@@ -1658,10 +1658,15 @@
         <h1><span class="dot"></span>Deep Delve</h1>
         <p class="tagline">How do you want to play?</p>
       </div>
-      <div style="display:flex; gap:8px; align-self:flex-start;">
-        <button class="secondary" id="btnGoFriends" style="width:auto; padding:8px 14px;">👥 Friends<span class="friend-count-pill" id="friendReqPill" style="display:none;"></span></button>
-        <button class="secondary" id="btnGoShopMode" style="width:auto; padding:8px 14px;">🪙 Shop<span class="token-badge token-badge-count">0</span></button>
-        <button class="secondary" id="btnModeToAccount" style="width:auto; padding:8px 14px;">⚙️ Account</button>
+      <div class="game-menu-wrap">
+        <button class="secondary game-menu-btn" id="btnModeMenu" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+          <span class="hamburger-icon"><span></span><span></span><span></span></span>
+        </button>
+        <div class="game-menu-panel" id="modeMenuPanel">
+          <button class="game-menu-item" id="btnGoFriends" type="button"><span class="game-menu-emoji">👥</span><span class="game-menu-label">Friends</span><span class="friend-count-pill" id="friendReqPill" style="display:none;"></span></button>
+          <button class="game-menu-item" id="btnGoShopMode" type="button"><span class="game-menu-emoji">🪙</span><span class="game-menu-label">Shop</span><span class="token-badge token-badge-count">0</span></button>
+          <button class="game-menu-item" id="btnModeToAccount" type="button"><span class="game-menu-emoji">⚙️</span><span class="game-menu-label">Account</span></button>
+        </div>
       </div>
     </header>
     <div class="panel">
@@ -1687,7 +1692,14 @@
         <h1><span class="dot"></span>Deep Delve</h1>
         <p class="tagline">Add friends, then race them straight from here.</p>
       </div>
-      <button class="secondary" id="btnFriendsBack" style="width:auto; padding:8px 14px; align-self:flex-start;">← Back</button>
+      <div class="game-menu-wrap">
+        <button class="secondary game-menu-btn" id="btnFriendsMenu" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+          <span class="hamburger-icon"><span></span><span></span><span></span></span>
+        </button>
+        <div class="game-menu-panel" id="friendsMenuPanel">
+          <button class="game-menu-item" id="btnFriendsBack" type="button"><span class="game-menu-emoji">⬅️</span><span class="game-menu-label">Back</span></button>
+        </div>
+      </div>
     </header>
     <div class="panel">
       <div class="card">
@@ -1729,7 +1741,14 @@
         <h1><span class="dot"></span>Deep Delve</h1>
         <p class="tagline">Host a race or join one with a friend's code.</p>
       </div>
-      <button class="secondary" id="btnMultiBack" style="width:auto; padding:8px 14px; align-self:flex-start;">← Back</button>
+      <div class="game-menu-wrap">
+        <button class="secondary game-menu-btn" id="btnMultiMenu" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+          <span class="hamburger-icon"><span></span><span></span><span></span></span>
+        </button>
+        <div class="game-menu-panel" id="multiMenuPanel">
+          <button class="game-menu-item" id="btnMultiBack" type="button"><span class="game-menu-emoji">⬅️</span><span class="game-menu-label">Back</span></button>
+        </div>
+      </div>
     </header>
     <div class="panel">
       <div class="card" id="raceInvitesCard" style="display:none;">
@@ -1783,7 +1802,14 @@
         <h1><span class="dot"></span>Deep Delve</h1>
         <p class="tagline">Spend tokens on a little extra help.</p>
       </div>
-      <button class="secondary" id="btnShopBack" style="width:auto; padding:8px 14px; align-self:flex-start;">← Back</button>
+      <div class="game-menu-wrap">
+        <button class="secondary game-menu-btn" id="btnShopMenu" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+          <span class="hamburger-icon"><span></span><span></span><span></span></span>
+        </button>
+        <div class="game-menu-panel" id="shopMenuPanel">
+          <button class="game-menu-item" id="btnShopBack" type="button"><span class="game-menu-emoji">⬅️</span><span class="game-menu-label">Back</span></button>
+        </div>
+      </div>
     </header>
     <div class="panel">
       <div class="card">
@@ -1833,9 +1859,14 @@
         <h1><span class="dot"></span>Deep Delve</h1>
         <p class="tagline">Pick a size, an explorer, and a theme — then head into the cave.</p>
       </div>
-      <div style="display:flex; gap:8px; align-self:flex-start;">
-        <button class="secondary" id="btnSetupBackToMode" style="width:auto; padding:8px 14px;">← Back</button>
-        <button class="secondary" id="btnSetupToAccount" style="width:auto; padding:8px 14px;">⚙️ Account</button>
+      <div class="game-menu-wrap">
+        <button class="secondary game-menu-btn" id="btnSetupMenu" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+          <span class="hamburger-icon"><span></span><span></span><span></span></span>
+        </button>
+        <div class="game-menu-panel" id="setupMenuPanel">
+          <button class="game-menu-item" id="btnSetupBackToMode" type="button"><span class="game-menu-emoji">⬅️</span><span class="game-menu-label">Back</span></button>
+          <button class="game-menu-item" id="btnSetupToAccount" type="button"><span class="game-menu-emoji">⚙️</span><span class="game-menu-label">Account</span></button>
+        </div>
       </div>
     </header>
 
@@ -8678,37 +8709,54 @@
   // different account.
   document.getElementById('btnSignOut').addEventListener('click', () => showScreen('signin'));
 
-  // ---------- UI wiring: game-screen hamburger menu ----------
-  // The header's Maze setup / Multiplayer / Shop / Insights / Feedback /
-  // How to play / Log out buttons live inside this dropdown now. Each one
-  // keeps its own click handler (wired above/below by id) to do its job;
-  // this just opens/closes the list itself and closes it again the moment
-  // any item in it is used, so it behaves like a normal menu.
-  const gameMenuBtn = document.getElementById('btnGameMenu');
-  const gameMenuPanel = document.getElementById('gameMenuPanel');
+  // ---------- UI wiring: hamburger header menus (every screen) ----------
+  // Every screen's header buttons live inside one of these dropdowns now,
+  // each behind its own hamburger button. Each button inside keeps its own
+  // click handler (wired above/below by id) to do its job; this just
+  // opens/closes the list itself and closes it again the moment any item
+  // in it is used, so it behaves like a normal menu everywhere it appears.
+  const allHeaderMenus = [];
+  function setupHeaderMenu(btnId, panelId) {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    if (!btn || !panel) return;
 
-  function closeGameMenu() {
-    gameMenuPanel.classList.remove('open');
-    gameMenuBtn.setAttribute('aria-expanded', 'false');
+    function close() {
+      panel.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      allHeaderMenus.forEach(m => { if (m.panel !== panel) m.close(); });
+      const open = panel.classList.toggle('open');
+      btn.setAttribute('aria-expanded', String(open));
+    });
+
+    panel.querySelectorAll('.game-menu-item').forEach(item => {
+      item.addEventListener('click', close);
+    });
+
+    allHeaderMenus.push({ panel, close });
   }
 
-  gameMenuBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const open = gameMenuPanel.classList.toggle('open');
-    gameMenuBtn.setAttribute('aria-expanded', String(open));
-  });
-
-  gameMenuPanel.querySelectorAll('.game-menu-item').forEach(item => {
-    item.addEventListener('click', closeGameMenu);
-  });
+  setupHeaderMenu('btnGameMenu', 'gameMenuPanel');
+  setupHeaderMenu('btnModeMenu', 'modeMenuPanel');
+  setupHeaderMenu('btnFriendsMenu', 'friendsMenuPanel');
+  setupHeaderMenu('btnMultiMenu', 'multiMenuPanel');
+  setupHeaderMenu('btnShopMenu', 'shopMenuPanel');
+  setupHeaderMenu('btnSetupMenu', 'setupMenuPanel');
 
   document.addEventListener('click', (e) => {
-    if (gameMenuPanel.classList.contains('open') && !gameMenuPanel.contains(e.target) && e.target !== gameMenuBtn) {
-      closeGameMenu();
-    }
+    allHeaderMenus.forEach(m => {
+      const btn = m.panel.previousElementSibling;
+      if (m.panel.classList.contains('open') && !m.panel.contains(e.target) && e.target !== btn && !(btn && btn.contains(e.target))) {
+        m.close();
+      }
+    });
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && gameMenuPanel.classList.contains('open')) closeGameMenu();
+    if (e.key === 'Escape') allHeaderMenus.forEach(m => m.close());
   });
 
   // ---------- UI wiring: feedback page ----------
