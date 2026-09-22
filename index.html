@@ -2084,7 +2084,7 @@
           <button class="secondary" id="btnBraidToggle">🔀 Braided paths: Off</button>
           <button class="secondary" id="btnItemsToggle">💎 Collectibles: Off</button>
         </div>
-        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it. Braided paths open a few dead ends into loops for alternate routes. Collectibles sprinkle torches, unwind crystals, and the occasional locked gate into dead ends. Both apply to the next maze you generate.</p>
+        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it. Braided paths open a few dead ends into loops for alternate routes. Collectibles sprinkle torches, unwind crystals, and the occasional locked gate into dead ends — this option only appears once braided paths is on. All apply to the next maze you generate.</p>
       </div>
 
       <div class="card">
@@ -2209,7 +2209,7 @@
         <section>
           <h4>Dead ends</h4>
           <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze.</p>
-          <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> sprinkle torches (a temporary bigger fog radius) and unwind crystals (+1 unwind) into dead ends as bonus loot — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
+          <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> only shows up once braided paths is switched on, and sprinkles torches (a temporary bigger fog radius) and unwind crystals (+1 unwind) into dead ends as bonus loot — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
         </section>
       </div>
 
@@ -4460,6 +4460,12 @@
     state.braidEnabled = on;
     try { localStorage.setItem(BRAID_PREF_KEY, on ? 'on' : 'off'); } catch (e) { /* storage unavailable */ }
     syncBraidButton();
+    // Collectibles are only offered as a braided-paths extra — with braiding
+    // off, the maze has exactly one true route, so the option disappears
+    // entirely rather than sitting there disabled. If it was on when the
+    // player switches braiding off, turn it off too.
+    if (!on && state.itemsEnabled) setItemsEnabled(false);
+    syncItemsButton();
   }
   function syncBraidButton() {
     const btn = document.getElementById('btnBraidToggle');
@@ -4492,6 +4498,10 @@
   function syncItemsButton() {
     const btn = document.getElementById('btnItemsToggle');
     if (!btn) return;
+    // Collectibles is a braided-paths-only extra — it only shows up once
+    // braided paths is switched on, and disappears again (rather than just
+    // greying out) the moment braiding is off.
+    btn.style.display = state.braidEnabled ? '' : 'none';
     btn.textContent = state.itemsEnabled ? '💎 Collectibles: On' : '💎 Collectibles: Off';
     btn.setAttribute('aria-pressed', String(state.itemsEnabled));
   }
