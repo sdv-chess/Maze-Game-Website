@@ -480,6 +480,13 @@
   .hi-best { font-size: 10.5px; color: var(--teal); margin-top: 3px; }
   .history-empty { font-size: 11.5px; color: var(--text-faint); }
 
+  /* Battle history (past multiplayer races) */
+  .battle-history-body { max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+  .battle-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .battle-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--text-faint); margin-bottom: 8px; }
+  .battle-card-head .bh-size { color: var(--text-muted); }
+  .battle-card .lb-list { gap: 4px; margin-bottom: 0; }
+
   /* Characters */
   .chars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 
@@ -1788,6 +1795,7 @@
             <button class="secondary" id="btnJoinRace">Join race</button>
           </div>
           <p class="field-note" id="raceSetupNote"></p>
+          <button class="secondary" id="btnBattleHistory" style="width:auto; align-self:flex-start; padding:8px 14px;">📜 Battle history</button>
         </div>
       </div>
     </div>
@@ -2352,6 +2360,20 @@
     </div>
     <div class="modal-actions">
       <button class="primary" id="btnLeaderboardClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="battleHistoryOverlay">
+  <div class="modal leaderboard-modal">
+    <div class="icon">📜</div>
+    <h3>Battle history</h3>
+    <p class="lb-date">Your past races against friends, newest first.</p>
+    <div id="battleHistoryBody">
+      <p class="lb-empty">Loading…</p>
+    </div>
+    <div class="modal-actions">
+      <button class="primary" id="btnBattleHistoryClose">Close</button>
     </div>
   </div>
 </div>
@@ -6686,7 +6708,7 @@
   async function getAccount(username) {
     const { data, error } = await sb
       .from('accounts')
-      .select('username, solved_records, equipped_flair')
+      .select('username, solved_records, equipped_flair, battle_history')
       .eq('username', username.toLowerCase())
       .maybeSingle();
     if (error || !data) return null;
@@ -6719,7 +6741,7 @@
 
     const { error: insertError } = await sb
       .from('accounts')
-      .insert({ id: userId, username: key, solved_records: [], equipped_flair: null });
+      .insert({ id: userId, username: key, solved_records: [], equipped_flair: null, battle_history: [] });
     if (insertError) {
       return { ok: false, msg: 'That username is taken. Try another, or sign in instead.' };
     }
@@ -6843,6 +6865,104 @@
       .from('accounts')
       .update({ solved_records: records })
       .eq('username', username.toLowerCase());
+  }
+
+  // ---------- Battle history (past multiplayer races) ----------
+  // Lives on the signed-in player's own accounts row (like solved_records),
+  // since it's a personal log rather than something other players need to
+  // read. Run once in Supabase SQL editor to add the column:
+  //   alter table accounts add column if not exists battle_history jsonb default '[]'::jsonb;
+  const BATTLE_HISTORY_MAX = 40;
+
+  async function loadBattleHistory(username) {
+    const data = await getAccount(username);
+    return data ? (data.battle_history || []) : [];
+  }
+
+  async function saveBattleHistory(username, records) {
+    await sb
+      .from('accounts')
+      .update({ battle_history: records })
+      .eq('username', username.toLowerCase());
+  }
+
+  // Snapshots the room's final standings and appends them to the signed-in
+  // player's battle history. Called from leaveRaceInternal(), which every
+  // "leave the race" path (explicit leave, navigating away, or starting a
+  // fresh race over an old connection) funnels through, so this one hook
+  // catches all of them. Skipped for guests (no account to save to) and for
+  // rooms nobody else ever joined — a battle needs at least one opponent.
+  // Fire-and-forget and best effort: a failed save shouldn't block leaving.
+  function recordBattleResult() {
+    if (!state.currentUser || !state.race.active || !state.race.mazeReceived) return;
+    const players = Object.values(state.race.players || {});
+    if (players.length < 2) return;
+    const sorted = players.slice().sort((a, b) => {
+      if (a.finished && b.finished) return (a.time || 0) - (b.time || 0);
+      if (a.finished) return -1;
+      if (b.finished) return 1;
+      return (b.moves || 0) - (a.moves || 0);
+    });
+    const record = {
+      date: Date.now(),
+      code: state.race.code,
+      cols: state.race.cols,
+      rows: state.race.rows,
+      players: sorted.map(p => ({
+        name: p.name || 'Guest',
+        finished: !!p.finished,
+        time: p.finished ? (p.time || 0) : null,
+        moves: p.moves || 0,
+        isMe: p.id === state.race.myId
+      }))
+    };
+    const username = state.currentUser;
+    (async () => {
+      try {
+        const existing = await loadBattleHistory(username);
+        const updated = [record, ...existing].slice(0, BATTLE_HISTORY_MAX);
+        await saveBattleHistory(username, updated);
+      } catch (e) { /* best effort — a failed save shouldn't block leaving the race */ }
+    })();
+  }
+
+  function formatBattleDate(ts) {
+    return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+      ' · ' + new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+
+  async function renderBattleHistory() {
+    const body = document.getElementById('battleHistoryBody');
+    if (!body) return;
+    if (!state.currentUser) {
+      body.innerHTML = '<p class="lb-empty">Sign in to start tracking your race results against friends.</p>';
+      return;
+    }
+    body.innerHTML = '<p class="lb-empty">Loading…</p>';
+    let records = [];
+    try { records = await loadBattleHistory(state.currentUser); } catch (e) { /* best effort */ }
+    if (!records.length) {
+      body.innerHTML = '<p class="lb-empty">No races yet — host or join one from Multiplayer to start your history.</p>';
+      return;
+    }
+    let html = '<div class="battle-history-body">';
+    records.forEach(r => {
+      html += `<div class="battle-card">
+        <div class="battle-card-head"><span class="bh-size">${escapeHtml(String(r.cols || '?'))}×${escapeHtml(String(r.rows || '?'))} maze · code ${escapeHtml(r.code || '——')}</span><span>${formatBattleDate(r.date)}</span></div>
+        <div class="lb-list">`;
+      (r.players || []).forEach((p, i) => {
+        const rank = i + 1;
+        const status = p.finished ? `🏁 ${formatLbTime(p.time || 0)} · ${p.moves || 0} moves` : `Didn't finish · ${p.moves || 0} moves`;
+        html += `<div class="lb-row rank-${rank}${p.isMe ? ' me' : ''}">
+          <span class="lb-rank">${rank <= 3 && p.finished ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
+          <span class="lb-name">${escapeHtml(p.name || 'Guest')}</span>
+          <span class="lb-stats">${status}</span>
+        </div>`;
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
   }
 
   async function loadEquippedFlair(username) {
@@ -8488,6 +8608,13 @@
   });
   document.getElementById('btnLeaderboardClose').addEventListener('click', () => dailyLeaderboardOverlay.classList.remove('show'));
 
+  const battleHistoryOverlay = document.getElementById('battleHistoryOverlay');
+  document.getElementById('btnBattleHistory').addEventListener('click', () => {
+    battleHistoryOverlay.classList.add('show');
+    renderBattleHistory();
+  });
+  document.getElementById('btnBattleHistoryClose').addEventListener('click', () => battleHistoryOverlay.classList.remove('show'));
+
   // (The old local-save reminder banner was removed — progress now saves
   // to the player's online account automatically after every solve.)
 
@@ -9557,6 +9684,7 @@
   let raceReconnectTimer = null;
 
   function leaveRaceInternal() {
+    recordBattleResult();
     leaveVoiceChat();
     stopRaceRosterTick();
     resetRaceChat();
