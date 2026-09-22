@@ -2086,7 +2086,7 @@
           <button class="secondary" id="btnBraidToggle">🔀 Braided paths: Off</button>
           <button class="secondary" id="btnItemsToggle">💎 Collectibles: Off</button>
         </div>
-        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it. Braided paths open a few dead ends into loops for alternate routes. Collectibles sprinkle torches, unwind crystals, and the occasional locked gate into dead ends — this option only appears once braided paths is on. All apply to the next maze you generate.</p>
+        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it. Braided paths open a few dead ends into loops for alternate routes. Collectibles sprinkle unwind crystals, and — only while fog of war is also on — torches, plus the occasional locked gate, into dead ends. This option only appears once braided paths is on. All apply to the next maze you generate.</p>
       </div>
 
       <div class="card">
@@ -2211,7 +2211,7 @@
         <section>
           <h4>Dead ends</h4>
           <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze.</p>
-          <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> only shows up once braided paths is switched on, and sprinkles torches (a temporary bigger fog radius) and unwind crystals (+1 unwind) into dead ends as bonus loot — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
+          <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> only shows up once braided paths is switched on, and sprinkles unwind crystals (+1 unwind) into dead ends as bonus loot, plus torches (a temporary bigger fog radius) when Fog of war is also on — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
         </section>
       </div>
 
@@ -3771,7 +3771,7 @@
     }
   }
 
-  function decorateMaze(cells, cols, rows, rand, enabled) {
+  function decorateMaze(cells, cols, rows, rand, enabled, fogEnabled) {
     state.items = {};
     state.gates = [];
     state.hasKey = false;
@@ -3798,7 +3798,11 @@
       }
     }
 
-    const itemTypes = ['torch', 'crystal'];
+    // A torch's only effect is a temporary bigger Fog of War radius — with
+    // fog off the whole maze is already visible, so a torch pickup would do
+    // nothing. Only offer it as loot when fog is actually on; otherwise
+    // every dead-end pickup is a crystal.
+    const itemTypes = fogEnabled ? ['torch', 'crystal'] : ['crystal'];
     deadEnds.forEach(d => {
       const key = `${d.x},${d.y}`;
       if (state.items[key]) return; // key already placed here
@@ -3821,7 +3825,7 @@
     state.cells = generateMaze(cols, rows, rng);
     const rand = rng || Math.random;
     braidMaze(state.cells, cols, rows, rand, state.braidEnabled ? BRAID_PERCENT : 0);
-    decorateMaze(state.cells, cols, rows, rand, state.itemsEnabled);
+    decorateMaze(state.cells, cols, rows, rand, state.itemsEnabled, state.fogOfWar);
     state.everLost = false;
     state.fromLoad = false;
     if (sizeKey === 'custom') {
@@ -3887,7 +3891,7 @@
     const rand = mulberry32(seed);
     state.cells = generateMaze(cols, rows, rand);
     if (braided) braidMaze(state.cells, cols, rows, rand, BRAID_PERCENT);
-    decorateMaze(state.cells, cols, rows, rand, braided && itemsEnabled);
+    decorateMaze(state.cells, cols, rows, rand, braided && itemsEnabled, fogEnabled);
     state.fogOfWar = !!fogEnabled;
     state.everLost = false;
     state.fromLoad = false;
