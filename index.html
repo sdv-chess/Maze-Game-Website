@@ -4458,8 +4458,15 @@
     const isExit = state.player.x === state.cols - 1 && state.player.y === state.rows - 1;
     // Broadcast the finish the instant the exit is reached — not after the
     // finish animation plays — so other racers' rosters update promptly and
-    // the recorded time isn't padded by animation length.
-    updateRacePresence(isExit ? { finished: true, time: raceElapsedSeconds() } : null);
+    // the recorded time isn't padded by animation length. Finishing always
+    // lands immediately; a mid-run step goes through the throttle below.
+    if (isExit) {
+      clearTimeout(raceMoveThrottleTimer);
+      raceMoveThrottleTimer = null;
+      updateRacePresence({ finished: true, time: raceElapsedSeconds() });
+    } else {
+      scheduleRaceMovePresence();
+    }
     if (isExit) { reportRaceFinish(); startFinishSequence(); return; }
 
     const newCell = state.cells[state.player.y * state.cols + state.player.x];
@@ -9008,6 +9015,40 @@
     syncGameHeaderModeButton();
   }
 
+  // Moves happen in quick bursts (arrow-key holds, fast taps) — each one used
+  // to call updateRacePresence() straight away, which meant a fast run could
+  // fire off far more presence track() calls per second than Supabase
+  // Realtime allows. Once that rate limit was hit, the *race* channel itself
+  // (not just the separate voice channel) would drop and go through the
+  // "Connection dropped — reconnecting…" flow in connectRaceChannel. That
+  // reconnect briefly resets state.race.players to {} until the resubscribe's
+  // first presence sync lands, and everything else — syncVoicePeers, the
+  // roster, everyone else's view of this racer's avatar — reads from that
+  // same object. So moving fast looked like it was killing voice/camera and
+  // making the character vanish, then bringing both back once things settled
+  // down. Throttling movement's presence updates keeps the channel under the
+  // rate limit; it's only used for the per-step position broadcast below —
+  // every other caller (finishing, muting, joining voice, etc.) is rare
+  // enough to keep calling updateRacePresence directly and land immediately.
+  let raceMoveThrottleTimer = null;
+  let raceMoveLastSent = 0;
+  const RACE_MOVE_MIN_INTERVAL = 180;
+  function scheduleRaceMovePresence() {
+    if (!state.race.active) return;
+    const now = performance.now();
+    const elapsed = now - raceMoveLastSent;
+    if (elapsed >= RACE_MOVE_MIN_INTERVAL) {
+      raceMoveLastSent = now;
+      updateRacePresence();
+    } else if (!raceMoveThrottleTimer) {
+      raceMoveThrottleTimer = setTimeout(() => {
+        raceMoveThrottleTimer = null;
+        raceMoveLastSent = performance.now();
+        updateRacePresence();
+      }, RACE_MOVE_MIN_INTERVAL - elapsed);
+    }
+  }
+
   // Presence is how every racer's position, move count, and finish status
   // reach everyone else — cheap to send (Supabase diffs it) since moves are
   // discrete cell-to-cell steps, not a continuous stream.
@@ -9782,6 +9823,8 @@
     leaveVoiceChat();
     stopRaceRosterTick();
     resetRaceChat();
+    clearTimeout(raceMoveThrottleTimer);
+    raceMoveThrottleTimer = null;
     if (state.race.channel) {
       try { state.race.channel.unsubscribe(); } catch (e) { /* already gone */ }
     }
