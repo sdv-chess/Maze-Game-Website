@@ -1765,7 +1765,7 @@
       <div class="card" id="raceCard">
         <h2>🏁 Race a friend</h2>
         <div class="stack-gap" id="raceSetupBlock">
-          <p class="field-note">Race live — everyone moves through the same maze at once, and you'll see each other on the way. First to the torch wins. Races run without fog, braids, or collectibles, to keep things fair and in sync.</p>
+          <p class="field-note">Race live — everyone moves through the same maze at once, and you'll see each other on the way. First to the torch wins. Races run without fog or collectibles, to keep things fair and in sync — braided paths are optional and, when on, generate identically for everyone in the room.</p>
           <div class="row-2">
             <select class="field" id="raceSizeSelect" aria-label="Race maze size">
               <option value="small">Small</option>
@@ -1777,6 +1777,8 @@
             </select>
             <button class="primary" id="btnHostRace">Host a race</button>
           </div>
+          <button class="secondary" id="btnRaceBraidToggle">🔀 Braided paths: Off</button>
+          <p class="field-note">Only the host's setting matters — it applies to the room you create and is sent to everyone who joins your code, so the maze stays identical for both of you either way.</p>
           <div class="custom-panel" id="raceCustomPanel">
             <div class="row-2">
               <div>
@@ -2243,7 +2245,7 @@
         <p class="help-page-intro"><b>In short:</b> host or join a race for a room code, then everyone solves the exact same maze at the same time — first to the torch wins.</p>
         <section>
           <h4>Hosting or joining a race</h4>
-          <p>Tap "🏁 Multiplayer" in the header to open the race screen. Pick a size and tap "Host a race" to get a room code, or type a friend's code into "Join race" to jump into theirs. Races run without fog of war, braided paths, or collectibles, so everyone's cave is identical and the run stays fair.</p>
+          <p>Tap "🏁 Multiplayer" in the header to open the race screen. Pick a size and, if you want, switch on "🔀 Braided paths" — that's the host's call, and it's sent to everyone who joins so the maze still comes out identical for the whole room. Tap "Host a race" to get a room code, or type a friend's code into "Join race" to jump into theirs. Races still run without fog of war or collectibles, so everyone's view of the cave stays identical and the run stays fair.</p>
         </section>
         <section>
           <h4>Racing live</h4>
@@ -2677,6 +2679,7 @@
 
   const BRAID_PREF_KEY = 'deepDelveBraid';
   const ITEMS_PREF_KEY = 'deepDelveItems';
+  const RACE_BRAID_PREF_KEY = 'deepDelveRaceBraid';
   const TOKENS_STORAGE_KEY = 'deepDelveTokens';
   const STASH_PEEK_STORAGE_KEY = 'deepDelveStashPeek';
   const STASH_UNWIND_STORAGE_KEY = 'deepDelveStashUnwind';
@@ -3111,6 +3114,7 @@
     fogOfWar: false,
     braidEnabled: false,
     itemsEnabled: false,
+    raceBraidEnabled: false,
     items: {},
     itemsCollected: new Set(),
     gates: [],
@@ -3140,6 +3144,7 @@
       seed: null,
       cols: null,
       rows: null,
+      braided: false,
       mazeReceived: false,
       startAt: null,
       players: {},
@@ -3848,16 +3853,22 @@
 
   // A race maze is seeded off the room code (see hostRace/joinRace below) so
   // every racer's client generates the exact same layout independently —
-  // only the seed travels over the network, not the walls themselves. Braid
-  // loops and collectibles are left off on purpose: both are randomized
-  // per-client from the maze's own RNG stream, so turning them on here would
-  // desync visually (or, for collectibles, would need every pickup relayed
-  // in real time to stay fair) without adding much to a race.
-  function applyRaceMaze(cols, rows, seed) {
+  // only the seed travels over the network, not the walls themselves.
+  // Braided paths are opt-in per room (the host's toggle, carried to every
+  // joiner via room-info — see connectRaceChannel/broadcastRoomInfo) and
+  // stay in sync the same way the base maze does: braidMaze runs on the
+  // *same* seeded RNG object right after generateMaze, continuing its
+  // stream rather than drawing fresh randomness, so every client that gets
+  // the same seed and the same braided flag produces byte-identical walls.
+  // Collectibles stay off regardless — they'd need every pickup relayed in
+  // real time to stay fair, which isn't worth it for a race.
+  function applyRaceMaze(cols, rows, seed, braided) {
     state.sizeKey = 'race';
     state.cols = cols;
     state.rows = rows;
-    state.cells = generateMaze(cols, rows, mulberry32(seed));
+    const rand = mulberry32(seed);
+    state.cells = generateMaze(cols, rows, rand);
+    if (braided) braidMaze(state.cells, cols, rows, rand, BRAID_PERCENT);
     state.items = {};
     state.gates = [];
     state.everLost = false;
@@ -4097,6 +4108,7 @@
   try { state.fogOfWar = localStorage.getItem(FOG_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
   try { state.braidEnabled = localStorage.getItem(BRAID_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
   try { state.itemsEnabled = localStorage.getItem(ITEMS_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
+  try { state.raceBraidEnabled = localStorage.getItem(RACE_BRAID_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
 
   // ---------- Tokens ----------
   // A simple per-device wallet (not tied to an account, so it isn't synced
@@ -4454,6 +4466,23 @@
     if (!btn) return;
     btn.textContent = state.braidEnabled ? '🔀 Braided paths: On' : '🔀 Braided paths: Off';
     btn.setAttribute('aria-pressed', String(state.braidEnabled));
+  }
+  // Race version of the same toggle. This one only matters to the host —
+  // it's read at hostRace() time and carried to every joiner over the
+  // room-info broadcast (see connectRaceChannel/broadcastRoomInfo), so it's
+  // pointless (and potentially confusing) to let a joiner flip it once
+  // they're already in someone else's room, hence it only appears on the
+  // pre-race setup block, not mid-race.
+  function setRaceBraidEnabled(on) {
+    state.raceBraidEnabled = on;
+    try { localStorage.setItem(RACE_BRAID_PREF_KEY, on ? 'on' : 'off'); } catch (e) { /* storage unavailable */ }
+    syncRaceBraidButton();
+  }
+  function syncRaceBraidButton() {
+    const btn = document.getElementById('btnRaceBraidToggle');
+    if (!btn) return;
+    btn.textContent = state.raceBraidEnabled ? '🔀 Braided paths: On' : '🔀 Braided paths: Off';
+    btn.setAttribute('aria-pressed', String(state.raceBraidEnabled));
   }
   function setItemsEnabled(on) {
     state.itemsEnabled = on;
@@ -7360,10 +7389,10 @@
     const dims = SIZES.medium;
     const code = generateRaceCode();
     const seed = stringToSeed('deep-delve-race|' + code);
-    applyRaceMaze(dims.cols, dims.rows, seed);
+    applyRaceMaze(dims.cols, dims.rows, seed, state.raceBraidEnabled);
     showRaceActiveUI(code, false);
     try {
-      await connectRaceChannel(code, true, seed, dims);
+      await connectRaceChannel(code, true, seed, dims, null, state.raceBraidEnabled);
       updateRacePresence();
       sendInboxMessage(friendUsername, 'race-invite', { from: state.currentUser, code });
       raceActiveNote.textContent = `Invite sent to ${friendUsername} — waiting for them to join.`;
@@ -8468,6 +8497,8 @@
   document.getElementById('btnFogToggle').addEventListener('click', () => setFogOfWar(!state.fogOfWar));
   document.getElementById('btnBraidToggle').addEventListener('click', () => setBraidEnabled(!state.braidEnabled));
   document.getElementById('btnItemsToggle').addEventListener('click', () => setItemsEnabled(!state.itemsEnabled));
+  const btnRaceBraidToggle = document.getElementById('btnRaceBraidToggle');
+  if (btnRaceBraidToggle) btnRaceBraidToggle.addEventListener('click', () => setRaceBraidEnabled(!state.raceBraidEnabled));
 
   // ---------- UI wiring: challenge link ----------
   document.getElementById('btnSendChallenge').addEventListener('click', async () => {
@@ -9868,7 +9899,7 @@
 
   function broadcastRoomInfo() {
     if (!state.race.channel || !state.race.isHost) return;
-    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed, startAt: state.race.startAt } });
+    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed, braided: state.race.braided, startAt: state.race.startAt } });
   }
 
   // Tears down whatever race channel is currently open, if any, without
@@ -9889,7 +9920,7 @@
     }
     clearTimeout(raceJoinTimeout);
     clearTimeout(raceReconnectTimer);
-    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, mazeReceived: false, startAt: null, players: {}, officialTimes: {}, channel: null };
+    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, braided: false, mazeReceived: false, startAt: null, players: {}, officialTimes: {}, channel: null };
   }
 
   // Sends the racer's real, current position/move-count/finish state —
@@ -9924,7 +9955,7 @@
   // whatever maze info was already agreed on) across a reconnect, so a
   // resubscribe rejoins as the *same* racer with the *same* maze instead
   // of starting over as a stranger with a blank board.
-  function connectRaceChannel(code, isHost, seed, dims, existingRaceState) {
+  function connectRaceChannel(code, isHost, seed, dims, existingRaceState, braided) {
     if (!existingRaceState) leaveRaceInternal();
     const myId = existingRaceState ? existingRaceState.myId
       : ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('p-' + Math.random().toString(36).slice(2, 10)));
@@ -9936,6 +9967,12 @@
       seed: existingRaceState ? existingRaceState.seed : (seed || null),
       cols: existingRaceState ? existingRaceState.cols : (dims ? dims.cols : null),
       rows: existingRaceState ? existingRaceState.rows : (dims ? dims.rows : null),
+      // Whether this room's maze gets braided (looped dead ends) once
+      // generated — the host's choice, carried to every joiner via
+      // room-info below (and preserved across a reconnect) so everyone's
+      // maze comes out identical, since it's generated from the same
+      // continued seeded-RNG stream that generateMaze itself already uses.
+      braided: existingRaceState ? existingRaceState.braided : !!braided,
       mazeReceived: existingRaceState ? existingRaceState.mazeReceived : !!isHost,
       // The room's clock doesn't start at Date.now() here — it starts the
       // moment someone actually takes a first step (see
@@ -9969,13 +10006,14 @@
       state.race.seed = payload.seed;
       state.race.cols = payload.cols;
       state.race.rows = payload.rows;
+      state.race.braided = !!payload.braided;
       // Adopt the host's clock if the race has already started, but never
       // fall back to this device's own Date.now() — that's exactly the
       // per-device clock the shared start line exists to avoid. If the host
       // hasn't started yet, this just stays null until a 'race-begin'
       // broadcast arrives.
       state.race.startAt = payload.startAt || null;
-      applyRaceMaze(payload.cols, payload.rows, payload.seed);
+      applyRaceMaze(payload.cols, payload.rows, payload.seed, state.race.braided);
       updateRacePresence();
       showRaceActiveUI(code, false);
     });
@@ -10042,7 +10080,7 @@
           if (state.race.active && state.race.code === code) {
             raceActiveNote.textContent = 'Connection dropped — reconnecting…';
             raceActiveNote.className = 'field-note error';
-            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt, officialTimes: state.race.officialTimes };
+            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt, officialTimes: state.race.officialTimes, braided: state.race.braided };
             try { channel.unsubscribe(); } catch (e) { /* already gone */ }
             clearTimeout(raceReconnectTimer);
             raceReconnectTimer = setTimeout(() => {
@@ -10073,10 +10111,10 @@
     const dims = raceDimsFromUI();
     const code = generateRaceCode();
     const seed = stringToSeed('deep-delve-race|' + code);
-    applyRaceMaze(dims.cols, dims.rows, seed);
+    applyRaceMaze(dims.cols, dims.rows, seed, state.raceBraidEnabled);
     showRaceActiveUI(code, false);
     try {
-      await connectRaceChannel(code, true, seed, dims);
+      await connectRaceChannel(code, true, seed, dims, null, state.raceBraidEnabled);
       updateRacePresence();
     } catch (e) {
       raceActiveNote.textContent = "Couldn't open the race room — check your connection and try again.";
@@ -10165,6 +10203,7 @@
   syncFogButton();
   syncBraidButton();
   syncItemsButton();
+  syncRaceBraidButton();
   syncPeekButton();
   syncUnwindButton();
   syncStashControls();
