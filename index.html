@@ -3143,6 +3143,7 @@
       mazeReceived: false,
       startAt: null,
       players: {},
+      officialTimes: {},
       channel: null
     }
   };
@@ -4428,7 +4429,12 @@
       }
     }
 
-    if (!state.started) { state.started = true; startTimer(); syncPauseButton(); }
+    if (!state.started) {
+      state.started = true;
+      startTimer();
+      syncPauseButton();
+      if (state.race.active) beginRaceClockIfNeeded();
+    }
 
     state.player = { x: nx, y: ny };
     state.moves += 1;
@@ -4454,7 +4460,7 @@
     // finish animation plays — so other racers' rosters update promptly and
     // the recorded time isn't padded by animation length.
     updateRacePresence(isExit ? { finished: true, time: raceElapsedSeconds() } : null);
-    if (isExit) { startFinishSequence(); return; }
+    if (isExit) { reportRaceFinish(); startFinishSequence(); return; }
 
     const newCell = state.cells[state.player.y * state.cols + state.player.x];
     if (openCountEffective(newCell, state.player.x, state.player.y) === 1) {
@@ -9031,6 +9037,15 @@
       const metas = presenceState[key];
       if (metas && metas.length) players[key] = metas[metas.length - 1];
     });
+    // Presence carries each racer's own self-reported finish time, which can
+    // disagree with reality if their device's clock doesn't match the
+    // host's (see applyOfficialFinish below) — a host-confirmed time always
+    // overrides it here, and this runs on every presence sync, so the
+    // correction sticks instead of getting clobbered the next time anyone's
+    // presence updates (e.g. someone else just moving).
+    Object.keys(state.race.officialTimes).forEach(id => {
+      if (players[id]) players[id] = Object.assign({}, players[id], { finished: true, time: state.race.officialTimes[id] });
+    });
     state.race.players = players;
     renderRaceRoster();
     syncVoicePeers();
@@ -9038,6 +9053,85 @@
     // redraws every frame regardless, so an extra call here just piles more
     // full-canvas work onto whatever moment happens to have lots of presence
     // events landing at once (everyone moving/toggling camera in a race).
+  }
+
+  // ---------- Live race: shared start line + host-confirmed finishes ----------
+  // The room's clock used to start ticking the instant the host opened the
+  // room — before anyone, host included, had taken a single step — so a
+  // host who sat waiting for a friend to join watched the time climb for no
+  // reason, and a joiner who took a moment to load in was quietly charged
+  // for that load time too. The clock now starts at the first real step
+  // anyone in the room takes. The timestamp itself is still always read
+  // from the host's own clock (never a joiner's), so every racer keeps
+  // being measured against one single reference point rather than each
+  // device's own — see currentPresencePayload/room-info for the same idea
+  // applied to who supplies the seed and maze.
+  function beginRaceClockIfNeeded() {
+    if (!state.race.active || state.race.startAt) return;
+    if (state.race.isHost) {
+      state.race.startAt = Date.now();
+      updateRacePresence();
+      if (state.race.channel) {
+        state.race.channel.send({ type: 'broadcast', event: 'race-begin', payload: { startAt: state.race.startAt } }).catch(() => {});
+      }
+      renderRaceRoster();
+    } else if (state.race.channel) {
+      // Only the host is allowed to set the official start line, so a
+      // joiner who happens to move first just asks the host to start the
+      // clock. beginRaceClockIfNeeded() on the host's side is a no-op once
+      // startAt is already set, so a duplicate request here is harmless.
+      state.race.channel.send({ type: 'broadcast', event: 'request-start', payload: { from: state.race.myId } }).catch(() => {});
+    }
+  }
+
+  // Finish times used to be each racer comparing their OWN device's
+  // Date.now() against the shared startAt — but two phones/laptops can have
+  // system clocks minutes apart even when both are online and working
+  // fine, which was enough to make a racer who genuinely finished first
+  // show up ranked behind one who finished later. Routing every finish
+  // through the host — using only the host's own clock, for every racer —
+  // removes that: there's one clock deciding both the order and the time,
+  // never several unsynced ones being compared against each other.
+  function applyOfficialFinish(id, time) {
+    if (!id) return;
+    state.race.officialTimes[id] = time;
+    if (state.race.players[id]) {
+      state.race.players[id] = Object.assign({}, state.race.players[id], { finished: true, time });
+    }
+    renderRaceRoster();
+  }
+
+  function hostConfirmFinish(id) {
+    if (!state.race.isHost || !id || state.race.officialTimes[id] != null) return;
+    const officialTime = raceElapsedSeconds();
+    applyOfficialFinish(id, officialTime);
+    if (state.race.channel) {
+      state.race.channel.send({ type: 'broadcast', event: 'finish-confirmed', payload: { id, time: officialTime } }).catch(() => {});
+    }
+  }
+
+  // Called the instant the local player reaches the exit. Broadcasts never
+  // echo back to their own sender, so the host confirms its own finish
+  // directly instead of broadcasting to itself; everyone else asks the
+  // host to confirm theirs.
+  function reportRaceFinish() {
+    if (!state.race.active) return;
+    if (state.race.isHost) {
+      hostConfirmFinish(state.race.myId);
+      return;
+    }
+    if (!state.race.channel) return;
+    const myId = state.race.myId;
+    const selfTime = raceElapsedSeconds();
+    state.race.channel.send({ type: 'broadcast', event: 'finish', payload: { id: myId } }).catch(() => {});
+    // Best-effort fallback: if the host never confirms (dropped connection,
+    // left the room, etc.), fall back to this racer's own self-reported
+    // time after a few seconds rather than leaving them stuck unranked.
+    setTimeout(() => {
+      if (state.race.active && state.race.myId === myId && state.race.officialTimes[myId] == null) {
+        applyOfficialFinish(myId, selfTime);
+      }
+    }, 4000);
   }
 
   function raceElapsedSeconds() {
@@ -9693,7 +9787,7 @@
     }
     clearTimeout(raceJoinTimeout);
     clearTimeout(raceReconnectTimer);
-    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, mazeReceived: false, startAt: null, players: {}, channel: null };
+    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, mazeReceived: false, startAt: null, players: {}, officialTimes: {}, channel: null };
   }
 
   // Sends the racer's real, current position/move-count/finish state —
@@ -9741,12 +9835,20 @@
       cols: existingRaceState ? existingRaceState.cols : (dims ? dims.cols : null),
       rows: existingRaceState ? existingRaceState.rows : (dims ? dims.rows : null),
       mazeReceived: existingRaceState ? existingRaceState.mazeReceived : !!isHost,
-      // The host's own clock is the race's shared "start line" — set the
-      // instant they open the room, then handed to every joiner via
-      // room-info below, so everyone's finish time is measured against the
-      // same wall-clock reference instead of each racer's own device.
-      startAt: existingRaceState ? existingRaceState.startAt : (isHost ? Date.now() : null),
+      // The room's clock doesn't start at Date.now() here — it starts the
+      // moment someone actually takes a first step (see
+      // beginRaceClockIfNeeded), so nobody's charged time for sitting on
+      // the setup screen or loading in. Once it does start, the timestamp
+      // always comes from the host's own clock — handed to every joiner via
+      // room-info/race-begin below — so everyone's finish time is measured
+      // against the same wall-clock reference instead of each racer's own
+      // device.
+      startAt: existingRaceState ? existingRaceState.startAt : null,
       players: {},
+      // Host-confirmed finish times survive a reconnect (existingRaceState)
+      // so a brief connection blip never un-ranks someone who'd already
+      // legitimately finished.
+      officialTimes: existingRaceState ? (existingRaceState.officialTimes || {}) : {},
       channel: null
     };
     const channel = sb.channel(`race-${code}`, { config: { presence: { key: myId }, broadcast: { self: false } } });
@@ -9765,10 +9867,31 @@
       state.race.seed = payload.seed;
       state.race.cols = payload.cols;
       state.race.rows = payload.rows;
-      state.race.startAt = payload.startAt || Date.now();
+      // Adopt the host's clock if the race has already started, but never
+      // fall back to this device's own Date.now() — that's exactly the
+      // per-device clock the shared start line exists to avoid. If the host
+      // hasn't started yet, this just stays null until a 'race-begin'
+      // broadcast arrives.
+      state.race.startAt = payload.startAt || null;
       applyRaceMaze(payload.cols, payload.rows, payload.seed);
       updateRacePresence();
       showRaceActiveUI(code, false);
+    });
+    channel.on('broadcast', { event: 'race-begin' }, ({ payload }) => {
+      if (state.race.code !== code || state.race.startAt || !payload || !payload.startAt) return;
+      state.race.startAt = payload.startAt;
+      renderRaceRoster();
+    });
+    channel.on('broadcast', { event: 'request-start' }, () => {
+      if (state.race.code === code && state.race.isHost) beginRaceClockIfNeeded();
+    });
+    channel.on('broadcast', { event: 'finish' }, ({ payload }) => {
+      if (state.race.code !== code || !state.race.isHost || !payload || !payload.id) return;
+      hostConfirmFinish(payload.id);
+    });
+    channel.on('broadcast', { event: 'finish-confirmed' }, ({ payload }) => {
+      if (state.race.code !== code || !payload || !payload.id) return;
+      applyOfficialFinish(payload.id, payload.time);
     });
     channel.on('presence', { event: 'sync' }, syncRaceRosterFromPresence);
     // Supabase/Phoenix presence models every track() call (even one that
@@ -9817,7 +9940,7 @@
           if (state.race.active && state.race.code === code) {
             raceActiveNote.textContent = 'Connection dropped — reconnecting…';
             raceActiveNote.className = 'field-note error';
-            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt };
+            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt, officialTimes: state.race.officialTimes };
             try { channel.unsubscribe(); } catch (e) { /* already gone */ }
             clearTimeout(raceReconnectTimer);
             raceReconnectTimer = setTimeout(() => {
