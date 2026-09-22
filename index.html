@@ -3515,14 +3515,60 @@
     );
   }
 
+  // BFS distance from every cell to the goal, measured purely along the
+  // untouched spanning-tree walls (no braiding applied yet). Because a fresh
+  // DFS carve is a perfect maze, this is well-defined and unique for every
+  // cell — it's exactly "how many forward steps would this cell be from the
+  // exit if you could walk the one true route." braidMaze uses it below to
+  // pick which wall to knock down at a dead end.
+  function distanceToGoal(cells, cols, rows) {
+    const idx = (x, y) => y * cols + x;
+    const total = cols * rows;
+    const dist = new Array(total).fill(-1);
+    const goalIdx = idx(cols - 1, rows - 1);
+    dist[goalIdx] = 0;
+    const queue = [goalIdx];
+    let qi = 0;
+    while (qi < queue.length) {
+      const cur = queue[qi++];
+      const cx = cur % cols, cy = Math.floor(cur / cols);
+      const cell = cells[cur];
+      for (const dirKey of Object.keys(DIRS)) {
+        if (cell[dirKey]) continue; // wall in that direction
+        const d = DIRS[dirKey];
+        const nx = cx + d.dx, ny = cy + d.dy;
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+        const ni = idx(nx, ny);
+        if (dist[ni] !== -1) continue;
+        dist[ni] = dist[cur] + 1;
+        queue.push(ni);
+      }
+    }
+    return dist;
+  }
+
   // Removes a percentage of dead-end walls after the DFS carve, turning the
   // affected branches into loops ("braiding" the maze). Only ever opens a
   // wall that's currently closed and leads to an in-bounds neighbor, so it
   // can only add connectivity, never remove the guarantee that every cell is
   // reachable from the start.
+  //
+  // Which wall gets opened used to be picked uniformly at random among the
+  // dead end's legal (in-bounds, still-closed) neighbors. That could just as
+  // easily connect one dead-end branch to another dead-end branch — a
+  // "loop" that never actually led anywhere, so wandering into a braided
+  // branch by mistake still dead-ended, just a bit later. Instead, each
+  // dead end now opens toward whichever legal neighbor is closest to the
+  // goal (distanceToGoal, computed once up front from the unbraided tree).
+  // When one of those neighbors sits right on the real start→goal route,
+  // that's exactly what gets picked, so a wrong turn into that branch opens
+  // straight back onto the correct path; failing that, it still opens
+  // toward the most useful direction available, giving the maze genuine
+  // alternate routes rather than merely longer dead ends.
   function braidMaze(cells, cols, rows, rand, percent) {
     if (!percent) return;
     const idx = (x, y) => y * cols + x;
+    const distToGoal = distanceToGoal(cells, cols, rows);
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         if (x === 0 && y === 0) continue;
@@ -3537,7 +3583,20 @@
           return nx >= 0 && nx < cols && ny >= 0 && ny < rows;
         });
         if (!closedDirs.length) continue;
-        const dirKey = closedDirs[Math.floor(rand() * closedDirs.length)];
+        // Among the legal candidates, keep only the one(s) nearest the goal —
+        // ties (equally-close neighbors) still get a random pick between
+        // them, so braiding doesn't collapse into a single deterministic
+        // layout.
+        let bestDirs = [];
+        let bestDist = Infinity;
+        closedDirs.forEach(dirKey => {
+          const d = DIRS[dirKey];
+          const nx = x + d.dx, ny = y + d.dy;
+          const nd = distToGoal[idx(nx, ny)];
+          if (nd < bestDist) { bestDist = nd; bestDirs = [dirKey]; }
+          else if (nd === bestDist) { bestDirs.push(dirKey); }
+        });
+        const dirKey = bestDirs[Math.floor(rand() * bestDirs.length)];
         const d = DIRS[dirKey];
         const nx = x + d.dx, ny = y + d.dy;
         cells[idx(x, y)][dirKey] = false;
