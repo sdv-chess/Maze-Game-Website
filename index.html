@@ -1553,6 +1553,38 @@
     100% { opacity: 0; transform: scale(0.05) rotate(-300deg); }
   }
 
+  /* Race countdown — host-triggered "3, 2, 1, Start!" shown on every racer's
+     screen at once (see runRaceCountdown/race-begin broadcast). Sits above
+     everything (even the level-transition portal) since it can in principle
+     land right as a maze loads in. Movement is locked (see tryMove) for the
+     whole time this is visible, so nobody gets a head start. */
+  .race-countdown {
+    position: fixed; inset: 0; z-index: 250;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    background: rgba(6, 8, 13, 0.35);
+    transition: opacity 0.15s ease;
+  }
+  .race-countdown.show { opacity: 1; }
+  .race-countdown-num {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 96px;
+    line-height: 1;
+    color: var(--text);
+    text-shadow: 0 0 30px var(--gold, #ffb347);
+  }
+  .race-countdown-num.go { color: var(--teal); text-shadow: 0 0 30px var(--teal); font-size: 64px; }
+  .race-countdown-num.pulse { animation: raceCountdownPulse 1s cubic-bezier(0.2, 0.9, 0.3, 1); }
+  @keyframes raceCountdownPulse {
+    0%   { opacity: 0; transform: scale(0.4); }
+    30%  { opacity: 1; transform: scale(1.15); }
+    45%  { transform: scale(1); }
+    80%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.9); }
+  }
+
   /* Wall bump — a quick, contained shake plus a soft red edge-flash so a
      blocked move reads as "no" without feeling like a punishment. */
   .maze-scroll.wall-bump { animation: wallBumpShake 0.28s ease; }
@@ -2117,6 +2149,8 @@
             <button class="secondary" id="btnCopyRaceCode">📋 Copy code</button>
             <button class="secondary" id="btnCopyRaceLink">🔗 Copy link</button>
           </div>
+          <button class="primary" id="btnHostStartRace" style="display:none;">🚀 Start race</button>
+          <p class="field-note" id="raceStartNote" style="display:none;">Waiting for the host to start the race…</p>
           <div id="raceRoster"><p class="lb-empty">Waiting for racers…</p></div>
           <div class="race-chat" id="raceChatPanel">
             <div class="race-chat-log" id="raceChatLog"><p class="lb-empty">No messages yet — say hi.</p></div>
@@ -2499,6 +2533,10 @@
 <div class="level-transition" id="levelTransition">
   <div class="level-transition-icon" id="levelTransitionIcon">✨</div>
   <div class="level-transition-label" id="levelTransitionLabel">Level 2</div>
+</div>
+
+<div class="race-countdown" id="raceCountdownOverlay" aria-hidden="true">
+  <div class="race-countdown-num" id="raceCountdownNum">3</div>
 </div>
 
 <div class="overlay" id="pauseOverlay">
@@ -3422,6 +3460,10 @@
   const raceActiveNote = document.getElementById('raceActiveNote');
   const raceCodeDisplay = document.getElementById('raceCodeDisplay');
   const raceRosterEl = document.getElementById('raceRoster');
+  const btnHostStartRace = document.getElementById('btnHostStartRace');
+  const raceStartNote = document.getElementById('raceStartNote');
+  const raceCountdownOverlay = document.getElementById('raceCountdownOverlay');
+  const raceCountdownNum = document.getElementById('raceCountdownNum');
   const btnToggleVoice = document.getElementById('btnToggleVoice');
   const btnToggleMute = document.getElementById('btnToggleMute');
   const btnToggleCamera = document.getElementById('btnToggleCamera');
@@ -4601,6 +4643,12 @@
   // ---------- Movement ----------
   function tryMove(dirKey) {
     if (state.won || state.lost || state.paused || state.falling || state.finishing) return;
+    // In a race, movement is held until the host actually starts it: either
+    // the "3, 2, 1, Start!" countdown is running (state.race.locked), or the
+    // host simply hasn't pressed "Start race" yet (no startAt at all). Both
+    // cases fail silently here — the countdown overlay / waiting note (see
+    // updateStartRaceButtonVisibility) is what tells the player why.
+    if (state.race.active && (state.race.locked || !state.race.startAt)) return;
     const { x, y } = state.player;
     const idx = y * state.cols + x;
     const cell = state.cells[idx];
@@ -9491,6 +9539,9 @@
 
   function showRaceSetupUI() {
     stopRaceRosterTick();
+    clearInterval(raceCountdownInterval);
+    raceCountdownInterval = null;
+    hideRaceCountdownOverlay();
     if (raceActiveCard) raceActiveCard.style.display = 'none';
     raceSetupNote.textContent = '';
     raceSetupNote.className = 'field-note';
@@ -9514,6 +9565,7 @@
     showScreen('game');
     raceActiveNote.textContent = waiting ? 'Connecting to the host…' : '';
     raceActiveNote.className = 'field-note';
+    updateStartRaceButtonVisibility();
     renderRaceRoster();
     renderRaceChat();
     // Mid-race, the New maze / fog / braid / collectible toggles in
@@ -9621,6 +9673,102 @@
   // being measured against one single reference point rather than each
   // device's own — see currentPresencePayload/room-info for the same idea
   // applied to who supplies the seed and maze.
+  // ---------- Live race: host-triggered "3, 2, 1, Start!" countdown ----------
+  // Before this existed, the race clock quietly started the moment ANY
+  // racer took their first step (see beginRaceClockIfNeeded below), which
+  // meant one racer could just start moving immediately while others were
+  // still reading the maze size or finding the arrow keys. The host can now
+  // press "Start race" to pick one shared moment for everyone: a single
+  // future timestamp is broadcast, every racer (host included) counts down
+  // to that exact same instant, movement is locked the whole time, and the
+  // race clock itself starts at that instant rather than at each racer's
+  // own first move.
+  let raceCountdownInterval = null;
+
+  function updateStartRaceButtonVisibility() {
+    if (!btnHostStartRace) return;
+    const canStart = state.race.active && state.race.isHost && !state.race.startAt;
+    btnHostStartRace.style.display = canStart ? '' : 'none';
+    if (raceStartNote) {
+      // Joiners see a small note instead of the button, so it's clear the
+      // race hasn't been started yet and why their maze looks "frozen".
+      const showWaitingNote = state.race.active && !state.race.isHost && !state.race.startAt;
+      raceStartNote.style.display = showWaitingNote ? '' : 'none';
+    }
+  }
+
+  function showRaceCountdownOverlay() {
+    if (raceCountdownOverlay) raceCountdownOverlay.classList.add('show');
+  }
+  function hideRaceCountdownOverlay() {
+    if (raceCountdownOverlay) raceCountdownOverlay.classList.remove('show');
+  }
+  function paintRaceCountdownNum(label, isGo) {
+    if (!raceCountdownNum) return;
+    raceCountdownNum.textContent = label;
+    raceCountdownNum.className = 'race-countdown-num' + (isGo ? ' go' : '');
+    // Retrigger the pulse animation even when the same label repeats.
+    void raceCountdownNum.offsetWidth;
+    raceCountdownNum.classList.add('pulse');
+  }
+
+  // Runs on every device in the room — the host included — once a shared
+  // startAt is known (either just chosen locally by the host, or received
+  // via room-info/race-begin). Purely reads the clock against that one
+  // timestamp, so a racer who joins mid-countdown just sees fewer numbers
+  // rather than a differently-timed countdown.
+  function runRaceCountdown(startAt) {
+    if (!state.race.active || !startAt) return;
+    clearInterval(raceCountdownInterval);
+    raceCountdownInterval = null;
+    const tick = () => {
+      const msLeft = startAt - Date.now();
+      if (msLeft <= -400) {
+        // The "Start!" label itself is only shown briefly (see below); this
+        // guards against a very-late joiner landing after that window has
+        // already passed, so they don't get stuck on a stale overlay.
+        clearInterval(raceCountdownInterval);
+        raceCountdownInterval = null;
+        hideRaceCountdownOverlay();
+        state.race.locked = false;
+        return;
+      }
+      const secLeft = Math.ceil(msLeft / 1000);
+      if (msLeft <= 0) {
+        paintRaceCountdownNum('Start!', true);
+        state.race.locked = false;
+        clearInterval(raceCountdownInterval);
+        raceCountdownInterval = null;
+        setTimeout(hideRaceCountdownOverlay, 700);
+      } else {
+        state.race.locked = true;
+        paintRaceCountdownNum(String(secLeft), false);
+      }
+    };
+    showRaceCountdownOverlay();
+    state.race.locked = true;
+    tick();
+    raceCountdownInterval = setInterval(tick, 200);
+  }
+
+  // Host-only: called from the "🚀 Start race" button. Picks a single
+  // shared start moment a few seconds out, broadcasts it, and starts the
+  // same countdown locally (broadcasts never echo back to their own
+  // sender — see connectRaceChannel's { self: false } config).
+  const RACE_COUNTDOWN_MS = 3200;
+  function hostStartRaceCountdown() {
+    if (!state.race.active || !state.race.isHost || state.race.startAt) return;
+    const startAt = Date.now() + RACE_COUNTDOWN_MS;
+    state.race.startAt = startAt;
+    updateStartRaceButtonVisibility();
+    if (state.race.channel) {
+      state.race.channel.send({ type: 'broadcast', event: 'race-begin', payload: { startAt } }).catch(() => {});
+    }
+    updateRacePresence();
+    renderRaceRoster();
+    runRaceCountdown(startAt);
+  }
+
   function beginRaceClockIfNeeded() {
     if (!state.race.active || state.race.startAt) return;
     if (state.race.isHost) {
@@ -10336,6 +10484,9 @@
     recordBattleResult();
     leaveVoiceChat();
     stopRaceRosterTick();
+    clearInterval(raceCountdownInterval);
+    raceCountdownInterval = null;
+    hideRaceCountdownOverlay();
     resetRaceChat();
     clearTimeout(raceMoveThrottleTimer);
     raceMoveThrottleTimer = null;
@@ -10344,7 +10495,7 @@
     }
     clearTimeout(raceJoinTimeout);
     clearTimeout(raceReconnectTimer);
-    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, braided: false, itemsEnabled: false, fogEnabled: false, mazeReceived: false, startAt: null, players: {}, officialTimes: {}, channel: null };
+    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, braided: false, itemsEnabled: false, fogEnabled: false, mazeReceived: false, startAt: null, locked: false, players: {}, officialTimes: {}, channel: null };
     // The race may have applied its own fog setting (see applyRaceMaze) —
     // restore the player's own solo preference now that they're back, so
     // the Actions-card fog toggle doesn't silently show the race's choice.
@@ -10422,6 +10573,11 @@
       // against the same wall-clock reference instead of each racer's own
       // device.
       startAt: existingRaceState ? existingRaceState.startAt : null,
+      // True from the moment the host presses "Start race" until the
+      // "3, 2, 1, Start!" countdown finishes on THIS device — tryMove()
+      // refuses to move the player while it's true, for host and joiners
+      // alike, so nobody gets a head start. See runRaceCountdown below.
+      locked: false,
       players: {},
       // Host-confirmed finish times survive a reconnect (existingRaceState)
       // so a brief connection blip never un-ranks someone who'd already
@@ -10457,11 +10613,19 @@
       applyRaceMaze(payload.cols, payload.rows, payload.seed, state.race.braided, state.race.itemsEnabled, state.race.fogEnabled);
       updateRacePresence();
       showRaceActiveUI(code, false);
+      // Joining (or reconnecting) mid-countdown lands here with a startAt
+      // that's already set but still in the future — pick the countdown up
+      // right where everyone else is, rather than showing this racer as
+      // unlocked and ready to move before the room actually starts.
+      if (state.race.startAt) runRaceCountdown(state.race.startAt);
+      updateStartRaceButtonVisibility();
     });
     channel.on('broadcast', { event: 'race-begin' }, ({ payload }) => {
       if (state.race.code !== code || state.race.startAt || !payload || !payload.startAt) return;
       state.race.startAt = payload.startAt;
       renderRaceRoster();
+      updateStartRaceButtonVisibility();
+      runRaceCountdown(state.race.startAt);
     });
     channel.on('broadcast', { event: 'request-start' }, () => {
       if (state.race.code === code && state.race.isHost) beginRaceClockIfNeeded();
@@ -10600,6 +10764,10 @@
     showScreen('multiplayer');
     draw();
   });
+
+  if (btnHostStartRace) {
+    btnHostStartRace.addEventListener('click', hostStartRaceCountdown);
+  }
 
   document.getElementById('btnCopyRaceCode').addEventListener('click', async () => {
     if (!state.race.code) return;
