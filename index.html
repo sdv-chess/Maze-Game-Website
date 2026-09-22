@@ -997,8 +997,8 @@
   .mini-map canvas { display: block; border-radius: 3px; }
 
   .peek-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-  #btnPeek, #btnUnwind { width: auto; padding: 8px 14px; font-size: 12px; }
-  #btnUnwind:disabled { opacity: 0.45; cursor: not-allowed; }
+  #btnPeek, #btnUnwind, #btnAnchor, #btnBlink { width: auto; padding: 8px 14px; font-size: 12px; }
+  #btnUnwind:disabled, #btnAnchor:disabled, #btnBlink:disabled { opacity: 0.45; cursor: not-allowed; }
 
   .overlay {
     position: fixed;
@@ -2057,6 +2057,8 @@
       <div class="peek-row">
         <button class="secondary" id="btnPeek">👁️ Peek (1 left)</button>
         <button class="secondary" id="btnUnwind">🔙 Unwind (3 left)</button>
+        <button class="secondary" id="btnAnchor">⚓ No anchor set</button>
+        <button class="secondary" id="btnBlink">✨ Blink (0 left)</button>
       </div>
       <div class="stash-panel" id="stashPanel" style="display:none;">
         <div class="stash-panel-title">🎒 Your stash — draw banked items into this maze, the rest stay stacked</div>
@@ -2086,7 +2088,7 @@
           <button class="secondary" id="btnBraidToggle">🔀 Braided paths: Off</button>
           <button class="secondary" id="btnItemsToggle">💎 Collectibles: Off</button>
         </div>
-        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it. Braided paths open a few dead ends into loops for alternate routes. Collectibles sprinkle unwind crystals, and — only while fog of war is also on — torches, plus the occasional locked gate, into dead ends. This option only appears once braided paths is on. All apply to the next maze you generate.</p>
+        <p class="field-note">Fog of war only lights the cave near you — the rest stays dark until you walk it. Braided paths open a few dead ends into loops for alternate routes. Collectibles sprinkle unwind crystals, blink charges and anchors into dead ends always, plus — only while fog of war is also on — torches, lanterns, compass shards and trapper's kits, plus the occasional locked gate. This option only appears once braided paths is on. All apply to the next maze you generate.</p>
       </div>
 
       <div class="card">
@@ -2211,7 +2213,12 @@
         <section>
           <h4>Dead ends</h4>
           <p>Since you can't backtrack (beyond what Unwind allows), walking into a true dead end past your Unwind budget ends your run for good. Use "New maze" for a fresh layout, or "Restart" to try the same one again. If you're mid-run, "New maze" asks you to confirm first, since it discards that maze.</p>
-          <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> only shows up once braided paths is switched on, and sprinkles unwind crystals (+1 unwind) into dead ends as bonus loot, plus torches (a temporary bigger fog radius) when Fog of war is also on — fetching one is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
+          <p>Two optional extras live in the Actions card. <b>Braided paths</b> knocks down a handful of dead-end walls after the maze is built, turning some branches into loops — an alternate route out instead of only Unwind. <b>Collectibles</b> only shows up once braided paths is switched on, and sprinkles loot into dead ends — fetching any of it is real risk-taking, exactly like any other dead end: if the branch runs deeper than your remaining unwinds, you can still get stranded. Occasionally a maze also gets a key-and-gate pair: a gate blocks part of the route to the exit torch until you've detoured for its key. Since a gated maze is unwinnable without the key, that one pickup is guaranteed safe — it tops up your unwind budget to cover the full retreat, however deep the branch is. Both toggles apply the next time you generate a maze.</p>
+        </section>
+        <section>
+          <h4>Collectibles</h4>
+          <p><b>💎 Crystal</b> is +1 unwind, permanently, for the rest of the run. <b>✨ Blink charge</b> is a stash of one-time instant retreats — tap "✨ Blink" anytime afterward to jump 2–3 cells back along the path you've already walked, without spending an Unwind. <b>⚓ Anchor</b> drops a checkpoint the instant you collect it; "⚓ Return to anchor" then teleports you back there whenever you like, as many times as you want, and never touches your Unwind budget either.</p>
+          <p>A few pieces of loot only appear once Fog of war is also on, since they're all about seeing further: <b>🔥 Torch</b> and its rarer upgrade <b>🏮 Lantern</b> both widen your lit radius for a while — a Lantern also marks any other uncollected loot inside that radius on the mini-map. <b>🧭 Compass shard</b> briefly points an arrow toward the nearest place you haven't explored yet (or straight at the exit if there's nowhere left nearby to discover). <b>🔦 Trapper's kit</b> is consumed the moment you pick it up — it scouts a different nearby unexplored dead end and marks whether it holds real loot or is empty, without saying what the loot is.</p>
         </section>
       </div>
 
@@ -2675,9 +2682,12 @@
   // instead of only Unwind. Both extras are opt-in (see btnBraidToggle /
   // btnItemsToggle) so the classic single-path feel stays the default.
   const BRAID_PERCENT = 8; // within the requested 5-10% band
-  const ITEM_DEADEND_CHANCE = 0.35; // fraction of eligible dead ends that get a torch/crystal
-  const TORCH_VISION_BOOST = 1.6;   // added to FOG_LIT_RADIUS while a torch is active
-  const TORCH_BOOST_DURATION = 9000; // ms
+  const ITEM_DEADEND_CHANCE = 0.35; // fraction of eligible dead ends that get a collectible
+  const TORCH_VISION_BOOST = 1.6;   // added to FOG_LIT_RADIUS while a torch (or lantern) is active
+  const TORCH_BOOST_DURATION = 9000; // ms — also the Lantern's radius-boost duration, since it's the torch effect plus a bonus
+  const COMPASS_DURATION = 4000;    // ms the compass arrow cue stays on screen after pickup
+  const BLINK_MIN_STEPS = 2;        // Blink retreats 2-3 cells — never a fixed distance, so it doesn't play identically every time
+  const BLINK_MAX_STEPS = 3;
 
   const BRAID_PREF_KEY = 'deepDelveBraid';
   const ITEMS_PREF_KEY = 'deepDelveItems';
@@ -3126,6 +3136,13 @@
     gates: [],
     hasKey: false,
     visionBoostUntil: 0,
+    // ---------- New collectible effects ----------
+    compassDir: null,       // cardinal DIRS key the compass arrow currently points, or null
+    compassUntil: 0,        // performance.now() timestamp the compass cue expires at
+    lanternUntil: 0,        // performance.now() timestamp the lantern's item-reveal bonus expires at (visionBoostUntil covers the shared radius boost)
+    anchorPos: null,        // { x, y } checkpoint dropped by the last Anchor pickup, or null if none set yet
+    blinkCharges: 0,        // banked one-time instant-retreat uses from Blink pickups
+    scoutedDeadEnds: new Map(), // key "x,y" -> true/false (has real loot or is empty), set by Trapper's kit
     baseUnwindLimit: 3,
     tokens: 0,
     stashPeek: 0,
@@ -3329,6 +3346,8 @@
   const btnPeek = document.getElementById('btnPeek');
   let peekTimer = null;
   const btnUnwind = document.getElementById('btnUnwind');
+  const btnAnchor = document.getElementById('btnAnchor');
+  const btnBlink = document.getElementById('btnBlink');
   const shopTokenCountEl = document.getElementById('shopTokenCount');
   const btnShopBuyPeek = document.getElementById('btnShopBuyPeek');
   const btnShopBuyUnwind = document.getElementById('btnShopBuyUnwind');
@@ -3776,6 +3795,7 @@
     state.gates = [];
     state.hasKey = false;
     state.itemsCollected = new Set();
+    state.scoutedDeadEnds = new Map();
     if (!enabled) return;
 
     const idx = (x, y) => y * cols + x;
@@ -3798,11 +3818,17 @@
       }
     }
 
-    // A torch's only effect is a temporary bigger Fog of War radius — with
-    // fog off the whole maze is already visible, so a torch pickup would do
-    // nothing. Only offer it as loot when fog is actually on; otherwise
-    // every dead-end pickup is a crystal.
-    const itemTypes = fogEnabled ? ['torch', 'crystal'] : ['crystal'];
+    // Torch, Lantern, Compass shard and Trapper's kit are all fog-of-war
+    // companions — with fog off the whole maze (and every dead end's real
+    // contents) is already visible, so a bigger vision radius or "what's in
+    // that other dead end" intel would do nothing. Only offer them as loot
+    // when fog is actually on; otherwise dead-end pickups are just the
+    // always-useful crystal/blink/anchor trio. The pool is picked by index,
+    // so repeating an entry biases the odds toward it — Lantern is a strict
+    // upgrade on Torch, so it appears far less often than Torch itself.
+    const itemTypes = fogEnabled
+      ? ['torch', 'torch', 'torch', 'crystal', 'crystal', 'crystal', 'compass', 'compass', 'trapper', 'trapper', 'blink', 'blink', 'anchor', 'anchor', 'lantern']
+      : ['crystal', 'crystal', 'crystal', 'blink', 'blink', 'anchor', 'anchor'];
     deadEnds.forEach(d => {
       const key = `${d.x},${d.y}`;
       if (state.items[key]) return; // key already placed here
@@ -4008,6 +4034,12 @@
     state.itemsCollected = new Set();
     state.hasKey = false;
     state.visionBoostUntil = 0;
+    state.compassDir = null;
+    state.compassUntil = 0;
+    state.lanternUntil = 0;
+    state.anchorPos = null;
+    state.blinkCharges = 0;
+    state.scoutedDeadEnds = new Map();
     state.paused = false;
     state.pauseUsed = false;
     state.falling = false;
@@ -4023,6 +4055,8 @@
     updateStats();
     syncPeekButton();
     syncUnwindButton();
+    syncAnchorButton();
+    syncBlinkButton();
     syncPauseButton();
     pauseOverlay.classList.remove('show');
   }
@@ -4114,6 +4148,8 @@
     loseStats.textContent = `Moves: ${state.moves} · Ran out of time at ${formatTime(state.timeLimit)}`;
     loseOverlay.classList.add('show');
     syncUnwindButton();
+    syncAnchorButton();
+    syncBlinkButton();
     syncPauseButton();
   }
 
@@ -4607,6 +4643,8 @@
     draw();
     scrollToPlayer();
     syncUnwindButton();
+    syncAnchorButton();
+    syncBlinkButton();
     scheduleAutoSaveMaze();
 
     const isExit = state.player.x === state.cols - 1 && state.player.y === state.rows - 1;
@@ -4641,10 +4679,12 @@
     }
   }
 
-  // Picks up a torch, crystal, or key sitting on the cell just entered, if
-  // any and if not already collected this run. Torches light a wider circle
-  // under Fog of War for a while, crystals grow the Unwind budget by one for
-  // the rest of this run, and a key opens every locked gate in the maze.
+  // Picks up whatever's sitting on the cell just entered, if anything and if
+  // not already collected this run. See the per-type comments below for what
+  // each one does; every non-key type is bonus loot with the same
+  // branchDepth-based stranding risk as fetching a torch or crystal always
+  // had — only the key tops up the escape budget, since a gated maze is
+  // unwinnable without it.
   function collectItemAt(x, y) {
     const key = `${x},${y}`;
     const item = state.items[key];
@@ -4656,12 +4696,50 @@
       // strand you. That's the "reward risk-taking" bargain.
       state.visionBoostUntil = performance.now() + TORCH_BOOST_DURATION;
       flagItemPickup('🔥 Torch lit — you can see further for a bit.');
+    } else if (item.type === 'lantern') {
+      // The Torch's upgrade: identical radius boost and duration (reusing
+      // visionBoostUntil means drawFog needs no changes at all), plus a
+      // separate expiry the mini-map checks to also mark any other
+      // uncollected loot within that same lit radius — see drawMiniMap.
+      state.visionBoostUntil = performance.now() + TORCH_BOOST_DURATION;
+      state.lanternUntil = state.visionBoostUntil;
+      flagItemPickup('🏮 Lantern lit — nearby loot shows on the mini-map for a bit.');
     } else if (item.type === 'crystal') {
       // Also bonus loot, same risk as a torch — its own +1 is the reward,
       // not a safety net for the retreat.
       state.unwindLimit += 1;
       syncUnwindButton();
       flagItemPickup('💎 Unwind crystal — +1 unwind.');
+    } else if (item.type === 'compass') {
+      // A fog-of-war companion to the torch: instead of lighting a wider
+      // circle, it briefly points an arrow toward the nearest place still
+      // worth exploring (or the exit, once nothing nearby is left to find).
+      activateCompass(x, y);
+      flagItemPickup('🧭 Compass shard — follow the arrow for a bit.');
+    } else if (item.type === 'anchor') {
+      // Drops the checkpoint right where it's collected — same dead-end
+      // risk as a torch or crystal to fetch, but the reward is a saved
+      // position you can return to at will, not an immediate stat boost.
+      // Collecting a second one simply moves the checkpoint to the new spot.
+      state.anchorPos = { x, y };
+      syncAnchorButton();
+      flagItemPickup('⚓ Anchor dropped — return here anytime.');
+    } else if (item.type === 'blink') {
+      // Not a budget increase like a crystal — an emergency escape you
+      // trigger yourself, later, on your own terms: instantly retreating a
+      // few cells without touching the Unwind budget at all. Banks as a
+      // charge rather than firing immediately, so grabbing one is safe to
+      // do well before you actually need the escape.
+      state.blinkCharges = (state.blinkCharges || 0) + 1;
+      syncBlinkButton();
+      flagItemPickup('✨ Blink charge — retreat a few cells instantly, anytime.');
+    } else if (item.type === 'trapper') {
+      // Consumed on the spot in exchange for intel: scouts a different,
+      // still-unexplored dead end and marks only whether it's worth a trip,
+      // never what's actually there — so it costs a real risk/reward slot
+      // instead of being free information.
+      scoutNearestDeadEnd(x, y);
+      flagItemPickup("🔦 Trapper's kit used — scouted a nearby dead end.");
     } else if (item.type === 'key') {
       // The key is mandatory, not bonus loot — without it a gated maze is
       // literally unwinnable, so it's the one pickup that's never a trap:
@@ -4810,6 +4888,8 @@
   async function handleWin() {
     state.won = true;
     syncUnwindButton();
+    syncAnchorButton();
+    syncBlinkButton();
     syncPauseButton();
     stopTimer();
     playWinSound();
@@ -5125,6 +5205,8 @@
     stopTimer();
     syncUnwindButton();
     syncPeekButton();
+    syncAnchorButton();
+    syncBlinkButton();
     clearTimeout(fallTimer);
     fallTimer = setTimeout(finishFall, FALL_DURATION);
   }
@@ -5137,6 +5219,8 @@
     loseStats.textContent = `Moves: ${state.moves} · No unwinds left to escape the dead end`;
     loseOverlay.classList.add('show');
     syncUnwindButton();
+    syncAnchorButton();
+    syncBlinkButton();
     syncPauseButton();
     draw();
 
@@ -5193,6 +5277,99 @@
     }
     path.reverse();
     return path;
+  }
+
+  // Same BFS shape as pathToExit above (walkable graph, locked gates block
+  // routing) but stops at the first cell satisfying an arbitrary predicate
+  // instead of a fixed target — shared by the Compass shard (nearest
+  // unexplored junction) and Trapper's kit (nearest unexplored dead end).
+  // Checks the start cell itself first, then expands outward; returns the
+  // full path (start inclusive) to whatever it found, or null if nothing
+  // reachable matches.
+  function bfsToFirstMatch(cols, rows, cells, start, isTarget) {
+    const idx = (x, y) => y * cols + x;
+    const total = cols * rows;
+    const visited = new Array(total).fill(false);
+    const prev = new Array(total).fill(-1);
+    const startIdx = idx(start.x, start.y);
+    visited[startIdx] = true;
+    if (isTarget(start.x, start.y)) return [{ x: start.x, y: start.y }];
+    const queue = [start];
+    let foundIdx = -1;
+    while (queue.length && foundIdx === -1) {
+      const cur = queue.shift();
+      const cell = cells[idx(cur.x, cur.y)];
+      for (const dirKey of Object.keys(DIRS)) {
+        if (cell[dirKey]) continue; // wall in that direction
+        if (isGateLocked(cur.x, cur.y, dirKey)) continue;
+        const d = DIRS[dirKey];
+        const nx = cur.x + d.dx, ny = cur.y + d.dy;
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+        const ni = idx(nx, ny);
+        if (visited[ni]) continue;
+        visited[ni] = true;
+        prev[ni] = idx(cur.x, cur.y);
+        if (isTarget(nx, ny)) { foundIdx = ni; break; }
+        queue.push({ x: nx, y: ny });
+      }
+    }
+    if (foundIdx === -1) return null;
+    const path = [];
+    let cur = foundIdx;
+    while (cur !== -1) {
+      path.push({ x: cur % cols, y: Math.floor(cur / cols) });
+      cur = prev[cur];
+    }
+    path.reverse();
+    return path;
+  }
+
+  function isJunctionCell(cell) {
+    return openCount(cell) >= 3; // an actual choice point, not just a corridor
+  }
+
+  function isDeadEndCell(cols, rows, cells, x, y) {
+    if (x === 0 && y === 0) return false;
+    if (x === cols - 1 && y === rows - 1) return false;
+    return openCount(cells[y * cols + x]) === 1;
+  }
+
+  // Compass shard effect: points toward the nearest cell that's both a
+  // junction (an actual choice, worth knowing about) and not yet in the
+  // trail. If the reachable maze is already fully explored, falls back to
+  // pointing straight at the exit instead — there's always *something*
+  // useful to point at.
+  function activateCompass(x, y) {
+    const start = { x, y };
+    const junctionPath = bfsToFirstMatch(state.cols, state.rows, state.cells, start, (cx, cy) =>
+      !(cx === x && cy === y) &&
+      !state.trail.has(`${cx},${cy}`) &&
+      isJunctionCell(state.cells[cy * state.cols + cx])
+    );
+    const path = junctionPath || pathToExit(state.cols, state.rows, state.cells, start);
+    if (!path || path.length < 2) { state.compassDir = null; state.compassUntil = 0; return; }
+    const from = path[0], to = path[1];
+    const dxTo = to.x - from.x, dyTo = to.y - from.y;
+    const dirKey = Object.keys(DIRS).find(k => DIRS[k].dx === dxTo && DIRS[k].dy === dyTo);
+    state.compassDir = dirKey || null;
+    state.compassUntil = dirKey ? (performance.now() + COMPASS_DURATION) : 0;
+  }
+
+  // Trapper's kit effect: finds the nearest *other* dead end the player
+  // hasn't reached yet and hasn't already been scouted, and records only
+  // whether it holds real loot — never the specific item — keyed by cell so
+  // drawScoutMarks()/drawMiniMap() can show a lasting mark there.
+  function scoutNearestDeadEnd(fromX, fromY) {
+    const path = bfsToFirstMatch(state.cols, state.rows, state.cells, { x: fromX, y: fromY }, (cx, cy) =>
+      !(cx === fromX && cy === fromY) &&
+      !state.trail.has(`${cx},${cy}`) &&
+      !state.scoutedDeadEnds.has(`${cx},${cy}`) &&
+      isDeadEndCell(state.cols, state.rows, state.cells, cx, cy)
+    );
+    if (!path || !path.length) return;
+    const dest = path[path.length - 1];
+    const destKey = `${dest.x},${dest.y}`;
+    state.scoutedDeadEnds.set(destKey, !!state.items[destKey]);
   }
 
   function usePeek() {
@@ -5363,6 +5540,83 @@
     btnUnwind.textContent = `🔙 Unwind (${remaining} left)`;
   }
 
+  // ---------- Blink (instant multi-cell retreat) ----------
+  // Mechanically distinct from Unwind and from a crystal's budget increase:
+  // this is a banked, one-time-use escape that jumps 2-3 cells back along
+  // the path already walked in a single instant, and never touches
+  // state.unwindsUsed/unwindLimit at all. Reuses the same pathLog-popping
+  // approach as doUnwind (including the same trail.delete on each cell
+  // stepped away from), just repeated a few times in one go.
+  function doBlink() {
+    if (state.won || state.lost || state.paused || state.falling || state.finishing || !state.cells.length) return;
+    if ((state.blinkCharges || 0) < 1) return;
+    if (state.pathLog.length <= 1) return;
+
+    const available = state.pathLog.length - 1;
+    const span = BLINK_MAX_STEPS - BLINK_MIN_STEPS + 1;
+    const steps = Math.min(available, BLINK_MIN_STEPS + Math.floor(Math.random() * span));
+    for (let i = 0; i < steps; i++) {
+      state.pathLog.pop();
+      const prev = state.pathLog[state.pathLog.length - 1];
+      state.trail.delete(`${state.player.x},${state.player.y}`);
+      state.player = { x: prev[0], y: prev[1] };
+    }
+    state.moves += steps;
+    state.blinkCharges -= 1;
+    playFootstepSound();
+    updateStats();
+    draw();
+    scrollToPlayer();
+    syncUnwindButton();
+    syncBlinkButton();
+    scheduleAutoSaveMaze();
+  }
+
+  function syncBlinkButton() {
+    if (!btnBlink) return;
+    const charges = state.blinkCharges || 0;
+    const canUse = charges > 0 && state.pathLog.length > 1 && !state.won && !state.lost && !state.paused && !state.falling && !state.finishing;
+    btnBlink.disabled = !canUse;
+    btnBlink.textContent = `✨ Blink (${charges} left)`;
+  }
+
+  // ---------- Anchor (checkpoint teleport) ----------
+  // The checkpoint itself is set the instant an Anchor pickup is collected
+  // (see collectItemAt) — this is just the "go back to it" half. Unlike
+  // Blink, returning to the anchor is reusable as many times as needed once
+  // set; it's a saved position, not a consumable charge, and — like
+  // Blink — never touches the Unwind budget.
+  function doReturnToAnchor() {
+    if (!state.anchorPos) return;
+    if (state.won || state.lost || state.paused || state.falling || state.finishing || !state.cells.length) return;
+    if (state.player.x === state.anchorPos.x && state.player.y === state.anchorPos.y) return;
+
+    state.player = { x: state.anchorPos.x, y: state.anchorPos.y };
+    state.moves += 1;
+    const trailKey = `${state.player.x},${state.player.y}`;
+    if (!state.trail.has(trailKey)) {
+      state.mmPulses.push({ x: state.player.x, y: state.player.y, t: performance.now() });
+    }
+    state.trail.add(trailKey);
+    state.pathLog.push([state.player.x, state.player.y]);
+    playFootstepSound();
+    updateStats();
+    draw();
+    scrollToPlayer();
+    syncUnwindButton();
+    syncAnchorButton();
+    scheduleAutoSaveMaze();
+  }
+
+  function syncAnchorButton() {
+    if (!btnAnchor) return;
+    const set = !!state.anchorPos;
+    const atAnchor = set && state.player.x === state.anchorPos.x && state.player.y === state.anchorPos.y;
+    const canUse = set && !atAnchor && !state.won && !state.lost && !state.paused && !state.falling && !state.finishing;
+    btnAnchor.disabled = !canUse;
+    btnAnchor.textContent = set ? '⚓ Return to anchor' : '⚓ No anchor set';
+  }
+
   // ---------- Pause ----------
   // A single freeze per run: taps stop the clock (and the countdown, for
   // timed modes) dead in its tracks so stepping away doesn't cost you a
@@ -5378,6 +5632,8 @@
     pauseOverlay.classList.add('show');
     syncPauseButton();
     syncUnwindButton();
+    syncAnchorButton();
+    syncBlinkButton();
   }
 
   function doResume() {
@@ -5387,6 +5643,8 @@
     if (!state.won && !state.lost) startTimer();
     syncPauseButton();
     syncUnwindButton();
+    syncAnchorButton();
+    syncBlinkButton();
   }
 
   function syncPauseButton() {
@@ -5836,7 +6094,9 @@
       ctx.restore();
     }
 
+    drawCompassArrow();
     drawFog();
+    drawScoutMarks();
 
     pulseT += 0.06;
     ctx.restore();
@@ -6025,7 +6285,10 @@
     ctx.restore();
   }
 
-  const ITEM_EMOJI = { torch: '🔥', crystal: '💎', key: '🗝️' };
+  const ITEM_EMOJI = {
+    torch: '🔥', crystal: '💎', key: '🗝️',
+    lantern: '🏮', compass: '🧭', anchor: '⚓', blink: '✨', trapper: '🔦'
+  };
   function drawItems() {
     if (!state.items) return;
     const keys = Object.keys(state.items);
@@ -6041,6 +6304,56 @@
       const cy = iy * cellSize + cellSize / 2;
       const bob = Math.sin(pulseT * 1.4 + ix + iy) * cellSize * 0.05;
       ctx.fillText(ITEM_EMOJI[state.items[key].type] || '❔', cx, cy + bob);
+    });
+    ctx.restore();
+  }
+
+  // Compass shard cue: a small pulsing triangle offset from the player in
+  // the cued cardinal direction (state.compassDir), pointing toward the
+  // nearest unexplored junction or the exit — see activateCompass(). Fades
+  // out on its own once state.compassUntil passes, same pattern as the
+  // torch's visionBoostUntil.
+  function drawCompassArrow() {
+    if (!state.compassDir || performance.now() >= state.compassUntil) return;
+    const d = DIRS[state.compassDir];
+    if (!d) return;
+    const angle = Math.atan2(d.dy, d.dx);
+    const px = state.player.x * cellSize + cellSize / 2;
+    const py = state.player.y * cellSize + cellSize / 2;
+    const offset = cellSize * 0.92;
+    const pulse = 0.55 + Math.sin(pulseT * 2.4) * 0.35;
+    ctx.save();
+    ctx.translate(px + Math.cos(angle) * offset, py + Math.sin(angle) * offset);
+    ctx.rotate(angle);
+    ctx.globalAlpha = Math.max(0.3, pulse);
+    ctx.fillStyle = '#FFD65C';
+    ctx.beginPath();
+    ctx.moveTo(cellSize * 0.22, 0);
+    ctx.lineTo(-cellSize * 0.14, cellSize * 0.16);
+    ctx.lineTo(-cellSize * 0.14, -cellSize * 0.16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Trapper's kit marks: drawn *after* drawFog() so they show through the
+  // dark, unlike a plain item glyph — the whole point is intel about a cell
+  // you haven't reached yet. Only shows reward-vs-empty, never the specific
+  // item, and clears itself automatically once the player actually reaches
+  // that cell (the real contents take over from there).
+  function drawScoutMarks() {
+    if (!state.scoutedDeadEnds || !state.scoutedDeadEnds.size) return;
+    ctx.save();
+    ctx.font = `${Math.floor(cellSize * 0.42)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    state.scoutedDeadEnds.forEach((hasReward, key) => {
+      if (state.trail.has(key)) return;
+      const [sx, sy] = key.split(',').map(Number);
+      const cx = sx * cellSize + cellSize / 2;
+      const cy = sy * cellSize + cellSize / 2;
+      ctx.fillStyle = hasReward ? 'rgba(124, 230, 140, 0.95)' : 'rgba(190, 190, 200, 0.7)';
+      ctx.fillText(hasReward ? '❗' : '·', cx, cy - cellSize * 0.32);
     });
     ctx.restore();
   }
@@ -6150,6 +6463,37 @@
     if (!state.fogOfWar || state.trail.has(`${state.cols - 1},${state.rows - 1}`) || state.won) {
       miniMapCtx.fillStyle = `rgb(${themeCanvas.torchRgb})`;
       miniMapCtx.fillRect((state.cols - 1) * s, (state.rows - 1) * s, Math.max(2, s), Math.max(2, s));
+    }
+
+    // Trapper's kit marks: a scouted dead end shows here too (reward vs
+    // empty), same reward-vs-empty coloring as drawScoutMarks on the main
+    // canvas — clears itself once the player actually reaches that cell.
+    if (state.scoutedDeadEnds && state.scoutedDeadEnds.size) {
+      state.scoutedDeadEnds.forEach((hasReward, key) => {
+        if (state.trail.has(key)) return;
+        const [sx, sy] = key.split(',').map(Number);
+        miniMapCtx.fillStyle = hasReward ? '#7CE68C' : 'rgba(190,190,200,0.75)';
+        miniMapCtx.fillRect(sx * s, sy * s, Math.max(1, s), Math.max(1, s));
+      });
+    }
+
+    // Lantern bonus: while lit, mark any other uncollected loot within the
+    // same boosted radius drawFog() is already lighting on the main canvas —
+    // the mini-map otherwise never shows items at all, so this is purely
+    // extra intel a plain torch doesn't grant.
+    if (performance.now() < state.lanternUntil && state.items) {
+      const radius = FOG_LIT_RADIUS + TORCH_VISION_BOOST;
+      const px = state.player.x, py = state.player.y;
+      Object.keys(state.items).forEach(key => {
+        if (state.itemsCollected.has(key)) return;
+        const [ix, iy] = key.split(',').map(Number);
+        const dx = ix - px, dy = iy - py;
+        if (Math.sqrt(dx * dx + dy * dy) > radius) return;
+        miniMapCtx.fillStyle = '#FFD65C';
+        miniMapCtx.beginPath();
+        miniMapCtx.arc(ix * s + s / 2, iy * s + s / 2, Math.max(1.5, s * 0.6), 0, Math.PI * 2);
+        miniMapCtx.fill();
+      });
     }
 
     miniMapCtx.fillStyle = '#ffffff';
@@ -6385,6 +6729,12 @@
       state.itemsCollected = new Set();
       state.hasKey = false;
       state.visionBoostUntil = 0;
+      state.compassDir = null;
+      state.compassUntil = 0;
+      state.lanternUntil = 0;
+      state.anchorPos = null;
+      state.blinkCharges = 0;
+      state.scoutedDeadEnds = new Map();
       state.player = { x: data.px, y: data.py };
       state.moves = data.mv || 0;
       state.seconds = data.s || 0;
@@ -6447,6 +6797,8 @@
       }
       syncPeekButton();
       syncUnwindButton();
+      syncAnchorButton();
+      syncBlinkButton();
       syncPauseButton();
 
       if (statTimeLabel) statTimeLabel.textContent = state.timeLimit ? 'Time left' : 'Time';
@@ -8793,6 +9145,8 @@
 
   btnPeek.addEventListener('click', usePeek);
   btnUnwind.addEventListener('click', doUnwind);
+  if (btnAnchor) btnAnchor.addEventListener('click', doReturnToAnchor);
+  if (btnBlink) btnBlink.addEventListener('click', doBlink);
   btnPause.addEventListener('click', doPause);
   btnResume.addEventListener('click', doResume);
 
@@ -10295,6 +10649,8 @@
   syncRaceFogButton();
   syncPeekButton();
   syncUnwindButton();
+  syncAnchorButton();
+  syncBlinkButton();
   syncStashControls();
   syncTokenBadges();
   syncPauseButton();
