@@ -1765,7 +1765,7 @@
       <div class="card" id="raceCard">
         <h2>🏁 Race a friend</h2>
         <div class="stack-gap" id="raceSetupBlock">
-          <p class="field-note">Race live — everyone moves through the same maze at once, and you'll see each other on the way. First to the torch wins. Races run without fog of war, to keep the room in sync — braided paths are optional and, when on, generate identically for everyone in the room, and unlock collectibles too.</p>
+          <p class="field-note">Race live — everyone moves through the same maze at once, and you'll see each other on the way. First to the torch wins. Fog of war, braided paths, and collectibles are all optional for a race — when on, they generate or apply identically for everyone in the room.</p>
           <div class="row-2">
             <select class="field" id="raceSizeSelect" aria-label="Race maze size">
               <option value="small">Small</option>
@@ -1777,9 +1777,10 @@
             </select>
             <button class="primary" id="btnHostRace">Host a race</button>
           </div>
+          <button class="secondary" id="btnRaceFogToggle">🌫️ Fog of war: Off</button>
           <button class="secondary" id="btnRaceBraidToggle">🔀 Braided paths: Off</button>
           <button class="secondary" id="btnRaceItemsToggle">💎 Collectibles: Off</button>
-          <p class="field-note">Only the host's setting matters — it applies to the room you create and is sent to everyone who joins your code, so the maze stays identical for both of you either way. Collectibles only appears once braided paths is on.</p>
+          <p class="field-note">Only the host can change fog of war, braided paths, or collectibles — whatever the host has set applies to the room they create and is sent to everyone who joins their code, so the maze and its rules stay identical for the whole room either way. Collectibles only appears once braided paths is on.</p>
           <div class="custom-panel" id="raceCustomPanel">
             <div class="row-2">
               <div>
@@ -2246,7 +2247,7 @@
         <p class="help-page-intro"><b>In short:</b> host or join a race for a room code, then everyone solves the exact same maze at the same time — first to the torch wins.</p>
         <section>
           <h4>Hosting or joining a race</h4>
-          <p>Tap "🏁 Multiplayer" in the header to open the race screen. Pick a size and, if you want, switch on "🔀 Braided paths" — that's the host's call, and it's sent to everyone who joins so the maze still comes out identical for the whole room. Turning braided paths on also unlocks "💎 Collectibles" for the race, same as solo play. Tap "Host a race" to get a room code, or type a friend's code into "Join race" to jump into theirs. Races still run without fog of war, so everyone's view of the cave stays identical and the run stays fair.</p>
+          <p>Tap "🏁 Multiplayer" in the header to open the race screen. Pick a size and, if you want, switch on "🌫️ Fog of war", "🔀 Braided paths", and/or "💎 Collectibles" (which only appears once braided paths is on) — only the host's choices matter, and they're sent to everyone who joins so the room stays identical and in sync for everyone in it. Tap "Host a race" to get a room code, or type a friend's code into "Join race" to jump into theirs.</p>
         </section>
         <section>
           <h4>Racing live</h4>
@@ -2682,6 +2683,7 @@
   const ITEMS_PREF_KEY = 'deepDelveItems';
   const RACE_BRAID_PREF_KEY = 'deepDelveRaceBraid';
   const RACE_ITEMS_PREF_KEY = 'deepDelveRaceItems';
+  const RACE_FOG_PREF_KEY = 'deepDelveRaceFog';
   const TOKENS_STORAGE_KEY = 'deepDelveTokens';
   const STASH_PEEK_STORAGE_KEY = 'deepDelveStashPeek';
   const STASH_UNWIND_STORAGE_KEY = 'deepDelveStashUnwind';
@@ -3118,6 +3120,7 @@
     itemsEnabled: false,
     raceBraidEnabled: false,
     raceItemsEnabled: false,
+    raceFogEnabled: false,
     items: {},
     itemsCollected: new Set(),
     gates: [],
@@ -3768,12 +3771,12 @@
     }
   }
 
-  function decorateMaze(cells, cols, rows, rand) {
+  function decorateMaze(cells, cols, rows, rand, enabled) {
     state.items = {};
     state.gates = [];
     state.hasKey = false;
     state.itemsCollected = new Set();
-    if (!state.itemsEnabled) return;
+    if (!enabled) return;
 
     const idx = (x, y) => y * cols + x;
     const deadEnds = [];
@@ -3818,7 +3821,7 @@
     state.cells = generateMaze(cols, rows, rng);
     const rand = rng || Math.random;
     braidMaze(state.cells, cols, rows, rand, state.braidEnabled ? BRAID_PERCENT : 0);
-    decorateMaze(state.cells, cols, rows, rand);
+    decorateMaze(state.cells, cols, rows, rand, state.itemsEnabled);
     state.everLost = false;
     state.fromLoad = false;
     if (sizeKey === 'custom') {
@@ -3868,16 +3871,24 @@
   // stream, so every client places the exact same torches/crystals/gate at
   // the exact same cells from nothing but the shared seed — no need to
   // relay individual pickups, since each racer's own collection only ever
-  // affects their own unwind budget, same as solo play.
-  function applyRaceMaze(cols, rows, seed, braided, itemsEnabled) {
+  // affects their own unwind budget, same as solo play. Note this passes
+  // the race's own itemsEnabled flag straight into decorateMaze rather than
+  // writing it to state.itemsEnabled — that field is the solo Actions-card
+  // preference, and stomping it here would silently flip a player's solo
+  // Collectibles toggle to match whatever the race they were just in used.
+  // Fog of war is a plain rendering setting (see draw()/state.fogOfWar) —
+  // it doesn't touch maze generation, but is still copied from the room's
+  // setting straight into state.fogOfWar so every racer's cave view matches
+  // whatever the host chose, exactly like braided/items above.
+  function applyRaceMaze(cols, rows, seed, braided, itemsEnabled, fogEnabled) {
     state.sizeKey = 'race';
     state.cols = cols;
     state.rows = rows;
     const rand = mulberry32(seed);
     state.cells = generateMaze(cols, rows, rand);
     if (braided) braidMaze(state.cells, cols, rows, rand, BRAID_PERCENT);
-    state.itemsEnabled = !!(braided && itemsEnabled);
-    decorateMaze(state.cells, cols, rows, rand);
+    decorateMaze(state.cells, cols, rows, rand, braided && itemsEnabled);
+    state.fogOfWar = !!fogEnabled;
     state.everLost = false;
     state.fromLoad = false;
     state.peekLimit = computePeekLimit(cols, rows);
@@ -4117,6 +4128,7 @@
   try { state.itemsEnabled = localStorage.getItem(ITEMS_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
   try { state.raceBraidEnabled = localStorage.getItem(RACE_BRAID_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
   try { state.raceItemsEnabled = localStorage.getItem(RACE_ITEMS_PREF_KEY) === 'on' && state.raceBraidEnabled; } catch (e) { /* storage unavailable — default off */ }
+  try { state.raceFogEnabled = localStorage.getItem(RACE_FOG_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — default off */ }
 
   // ---------- Tokens ----------
   // A simple per-device wallet (not tied to an account, so it isn't synced
@@ -4480,6 +4492,21 @@
     if (!btn) return;
     btn.textContent = state.braidEnabled ? '🔀 Braided paths: On' : '🔀 Braided paths: Off';
     btn.setAttribute('aria-pressed', String(state.braidEnabled));
+  }
+  // Race version of the fog toggle. Same host-only rule as braided/items
+  // below: only the host's setting is read (at hostRace() time) and carried
+  // to joiners over room-info, so a joiner flipping it locally wouldn't do
+  // anything — it only appears on the pre-race setup block, not mid-race.
+  function setRaceFogEnabled(on) {
+    state.raceFogEnabled = on;
+    try { localStorage.setItem(RACE_FOG_PREF_KEY, on ? 'on' : 'off'); } catch (e) { /* storage unavailable */ }
+    syncRaceFogButton();
+  }
+  function syncRaceFogButton() {
+    const btn = document.getElementById('btnRaceFogToggle');
+    if (!btn) return;
+    btn.textContent = state.raceFogEnabled ? '🌫️ Fog of war: On' : '🌫️ Fog of war: Off';
+    btn.setAttribute('aria-pressed', String(state.raceFogEnabled));
   }
   // Race version of the same toggle. This one only matters to the host —
   // it's read at hostRace() time and carried to every joiner over the
@@ -7424,10 +7451,10 @@
     const dims = SIZES.medium;
     const code = generateRaceCode();
     const seed = stringToSeed('deep-delve-race|' + code);
-    applyRaceMaze(dims.cols, dims.rows, seed, state.raceBraidEnabled, state.raceItemsEnabled);
+    applyRaceMaze(dims.cols, dims.rows, seed, state.raceBraidEnabled, state.raceItemsEnabled, state.raceFogEnabled);
     showRaceActiveUI(code, false);
     try {
-      await connectRaceChannel(code, true, seed, dims, null, state.raceBraidEnabled, state.raceItemsEnabled);
+      await connectRaceChannel(code, true, seed, dims, null, state.raceBraidEnabled, state.raceItemsEnabled, state.raceFogEnabled);
       updateRacePresence();
       sendInboxMessage(friendUsername, 'race-invite', { from: state.currentUser, code });
       raceActiveNote.textContent = `Invite sent to ${friendUsername} — waiting for them to join.`;
@@ -8532,6 +8559,8 @@
   document.getElementById('btnFogToggle').addEventListener('click', () => setFogOfWar(!state.fogOfWar));
   document.getElementById('btnBraidToggle').addEventListener('click', () => setBraidEnabled(!state.braidEnabled));
   document.getElementById('btnItemsToggle').addEventListener('click', () => setItemsEnabled(!state.itemsEnabled));
+  const btnRaceFogToggle = document.getElementById('btnRaceFogToggle');
+  if (btnRaceFogToggle) btnRaceFogToggle.addEventListener('click', () => setRaceFogEnabled(!state.raceFogEnabled));
   const btnRaceBraidToggle = document.getElementById('btnRaceBraidToggle');
   if (btnRaceBraidToggle) btnRaceBraidToggle.addEventListener('click', () => setRaceBraidEnabled(!state.raceBraidEnabled));
   const btnRaceItemsToggle = document.getElementById('btnRaceItemsToggle');
@@ -9936,7 +9965,7 @@
 
   function broadcastRoomInfo() {
     if (!state.race.channel || !state.race.isHost) return;
-    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled, startAt: state.race.startAt } });
+    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled, fogEnabled: state.race.fogEnabled, startAt: state.race.startAt } });
   }
 
   // Tears down whatever race channel is currently open, if any, without
@@ -9957,7 +9986,12 @@
     }
     clearTimeout(raceJoinTimeout);
     clearTimeout(raceReconnectTimer);
-    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, braided: false, itemsEnabled: false, mazeReceived: false, startAt: null, players: {}, officialTimes: {}, channel: null };
+    state.race = { active: false, code: null, isHost: false, myId: null, seed: null, cols: null, rows: null, braided: false, itemsEnabled: false, fogEnabled: false, mazeReceived: false, startAt: null, players: {}, officialTimes: {}, channel: null };
+    // The race may have applied its own fog setting (see applyRaceMaze) —
+    // restore the player's own solo preference now that they're back, so
+    // the Actions-card fog toggle doesn't silently show the race's choice.
+    try { state.fogOfWar = localStorage.getItem(FOG_PREF_KEY) === 'on'; } catch (e) { /* storage unavailable — leave as-is */ }
+    syncFogButton();
   }
 
   // Sends the racer's real, current position/move-count/finish state —
@@ -9992,7 +10026,7 @@
   // whatever maze info was already agreed on) across a reconnect, so a
   // resubscribe rejoins as the *same* racer with the *same* maze instead
   // of starting over as a stranger with a blank board.
-  function connectRaceChannel(code, isHost, seed, dims, existingRaceState, braided, itemsEnabled) {
+  function connectRaceChannel(code, isHost, seed, dims, existingRaceState, braided, itemsEnabled, fogEnabled) {
     if (!existingRaceState) leaveRaceInternal();
     const myId = existingRaceState ? existingRaceState.myId
       : ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('p-' + Math.random().toString(36).slice(2, 10)));
@@ -10014,6 +10048,12 @@
       // setRaceBraidEnabled), same handling as braided above: host's
       // choice, carried to joiners, survives a reconnect.
       itemsEnabled: existingRaceState ? existingRaceState.itemsEnabled : !!itemsEnabled,
+      // Fog of war for the room — purely a local-rendering setting (it
+      // doesn't touch maze generation), but still the host's call and
+      // carried to joiners the same way, so everyone's view of the cave
+      // matches everyone else's rather than some racers seeing the whole
+      // maze while others don't.
+      fogEnabled: existingRaceState ? existingRaceState.fogEnabled : !!fogEnabled,
       mazeReceived: existingRaceState ? existingRaceState.mazeReceived : !!isHost,
       // The room's clock doesn't start at Date.now() here — it starts the
       // moment someone actually takes a first step (see
@@ -10049,13 +10089,14 @@
       state.race.rows = payload.rows;
       state.race.braided = !!payload.braided;
       state.race.itemsEnabled = !!payload.itemsEnabled;
+      state.race.fogEnabled = !!payload.fogEnabled;
       // Adopt the host's clock if the race has already started, but never
       // fall back to this device's own Date.now() — that's exactly the
       // per-device clock the shared start line exists to avoid. If the host
       // hasn't started yet, this just stays null until a 'race-begin'
       // broadcast arrives.
       state.race.startAt = payload.startAt || null;
-      applyRaceMaze(payload.cols, payload.rows, payload.seed, state.race.braided, state.race.itemsEnabled);
+      applyRaceMaze(payload.cols, payload.rows, payload.seed, state.race.braided, state.race.itemsEnabled, state.race.fogEnabled);
       updateRacePresence();
       showRaceActiveUI(code, false);
     });
@@ -10122,7 +10163,7 @@
           if (state.race.active && state.race.code === code) {
             raceActiveNote.textContent = 'Connection dropped — reconnecting…';
             raceActiveNote.className = 'field-note error';
-            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt, officialTimes: state.race.officialTimes, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled };
+            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt, officialTimes: state.race.officialTimes, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled, fogEnabled: state.race.fogEnabled };
             try { channel.unsubscribe(); } catch (e) { /* already gone */ }
             clearTimeout(raceReconnectTimer);
             raceReconnectTimer = setTimeout(() => {
@@ -10153,10 +10194,10 @@
     const dims = raceDimsFromUI();
     const code = generateRaceCode();
     const seed = stringToSeed('deep-delve-race|' + code);
-    applyRaceMaze(dims.cols, dims.rows, seed, state.raceBraidEnabled, state.raceItemsEnabled);
+    applyRaceMaze(dims.cols, dims.rows, seed, state.raceBraidEnabled, state.raceItemsEnabled, state.raceFogEnabled);
     showRaceActiveUI(code, false);
     try {
-      await connectRaceChannel(code, true, seed, dims, null, state.raceBraidEnabled, state.raceItemsEnabled);
+      await connectRaceChannel(code, true, seed, dims, null, state.raceBraidEnabled, state.raceItemsEnabled, state.raceFogEnabled);
       updateRacePresence();
     } catch (e) {
       raceActiveNote.textContent = "Couldn't open the race room — check your connection and try again.";
@@ -10247,6 +10288,7 @@
   syncItemsButton();
   syncRaceBraidButton();
   syncRaceItemsButton();
+  syncRaceFogButton();
   syncPeekButton();
   syncUnwindButton();
   syncStashControls();
