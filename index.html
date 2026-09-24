@@ -434,6 +434,7 @@
     border: 1px solid var(--border); border-radius: 10px;
     font-size: 12.5px; line-height: 1.55; color: var(--text);
   }
+  .powerup-anim { display: block; width: 100%; max-width: 320px; height: auto; aspect-ratio: 280 / 140; border-radius: 8px; margin-bottom: 8px; }
   .powerup-info b.pu-title { display: block; margin-bottom: 4px; }
   .powerup-info .pu-how { color: var(--text-muted); display: block; margin-top: 4px; }
 
@@ -6691,6 +6692,186 @@
                 how: 'Used up the moment you pick it up. Only appears when fog of war is on.' }
   };
   const POWERUP_ORDER = ['key', 'crystal', 'blink', 'anchor', 'torch', 'lantern', 'compass', 'trapper'];
+  // ---------- Power-up demo animations ----------
+  // Tiny looping canvas demos shown in the power-ups info panel. Each scene
+  // is a time-based draw function (t in seconds, looping over T); the player
+  // walks between [time, x, y] keyframes on a small corridor strip.
+  const PU_W = 280, PU_H = 140, PU_C = 28;
+  let puAnimRAF = 0;
+  function stopPowerupAnim() { if (puAnimRAF) cancelAnimationFrame(puAnimRAF); puAnimRAF = 0; }
+  function puKf(t, f) {
+    if (t <= f[0][0]) return [f[0][1], f[0][2]];
+    for (let i = 1; i < f.length; i++) {
+      if (t <= f[i][0]) {
+        const a = f[i - 1], b = f[i], u = (t - a[0]) / (b[0] - a[0]);
+        return [a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+      }
+    }
+    const l = f[f.length - 1];
+    return [l[1], l[2]];
+  }
+  const puSeg = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+  const PU_ROW = n => Array.from({ length: n }, (_, i) => [i, 2]);
+
+  function puMakeG(ctx, col) {
+    const C = PU_C, mid = x => (x + 0.5) * C;
+    const rr = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
+    return {
+      cell(x, y, lit) { ctx.fillStyle = lit ? col.lit : col.cell; rr(x * C + 2, y * C + 2, C - 4, C - 4, 6); ctx.fill(); },
+      row(cells, litFn) { cells.forEach(([x, y], i) => this.cell(x, y, litFn ? litFn(i) : false)); },
+      em(ch, x, y, a) {
+        ctx.globalAlpha = a === undefined ? 1 : a;
+        ctx.font = '18px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = col.teal; ctx.fillText(ch, mid(x), mid(y) + 1);
+        ctx.globalAlpha = 1;
+      },
+      p(x, y) {
+        ctx.save(); ctx.shadowColor = col.teal; ctx.shadowBlur = 12; ctx.fillStyle = col.teal;
+        ctx.beginPath(); ctx.arc(mid(x), mid(y), 8, 0, 6.283); ctx.fill(); ctx.restore();
+      },
+      dot(x, y) { ctx.fillStyle = col.teal; ctx.beginPath(); ctx.arc(mid(x), mid(y), 3, 0, 6.283); ctx.fill(); },
+      ring(x, y, u) {
+        ctx.strokeStyle = col.teal; ctx.lineWidth = 2; ctx.globalAlpha = 1 - u;
+        ctx.beginPath(); ctx.arc(mid(x), mid(y), 8 + 20 * u, 0, 6.283); ctx.stroke(); ctx.globalAlpha = 1;
+      },
+      tri(x, y, s, a) {
+        ctx.globalAlpha = a; ctx.fillStyle = col.teal; ctx.beginPath();
+        ctx.moveTo(mid(x) + 8 * s, mid(y)); ctx.lineTo(mid(x) - 6 * s, mid(y) - 7 * s); ctx.lineTo(mid(x) - 6 * s, mid(y) + 7 * s);
+        ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      },
+      line(x1, y1, x2, y2, u) {
+        ctx.strokeStyle = col.teal; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(mid(x1), mid(y1)); ctx.lineTo(mid(x1 + (x2 - x1) * u), mid(y1 + (y2 - y1) * u)); ctx.stroke(); ctx.setLineDash([]);
+      },
+      pill(txt, on) {
+        ctx.font = '10.5px monospace';
+        const w = ctx.measureText(txt).width + 16, x = PU_W - w - 6;
+        ctx.fillStyle = on ? col.teal : 'rgba(255,255,255,.06)'; rr(x, 6, w, 20, 10); ctx.fill();
+        ctx.strokeStyle = on ? col.teal : col.border; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = on ? '#0B0E14' : col.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(txt, x + w / 2, 16);
+      },
+      cap(txt) {
+        ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, PU_H - 26, PU_W, 26);
+        ctx.font = '10.5px monospace'; ctx.fillStyle = col.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(txt, PU_W / 2, PU_H - 13);
+      },
+      fog(x, y, r) {
+        const g = ctx.createRadialGradient(mid(x), mid(y), r * C * 0.55, mid(x), mid(y), r * C);
+        g.addColorStop(0, 'rgba(8,10,16,0)'); g.addColorStop(1, 'rgba(8,10,16,.97)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, PU_W, PU_H);
+      }
+    };
+  }
+
+  const PU_LIGHT = t => 1.4 + 1.6 * (puSeg(t, 3, 3.3) - puSeg(t, 6.3, 6.8));
+  const PU_WALK = [[0, 0, 2], [3, 4, 2], [7, 6, 2], [9, 6, 2]];
+  const PU_SCENES = {
+    anchor: { T: 8, draw(g, t) {
+      const [x, y] = puKf(t, [[0, 0, 2], [2, 3, 2], [3, 3, 2], [5, 7, 2], [6.2, 7, 2], [6.21, 3, 2], [8, 3, 2]]);
+      g.row(PU_ROW(10));
+      g.em('⚓', 3, 2);
+      if (t >= 2 && t < 3) g.ring(3, 2, t - 2);
+      if (t >= 6.2 && t < 6.9) g.ring(3, 2, (t - 6.2) / 0.7);
+      g.pill('⚓ Return to anchor', t >= 5 && t < 6.2);
+      g.p(x, y);
+      g.cap(t < 2 ? 'Walk into the anchor' : t < 3 ? 'Checkpoint dropped right here' : t < 5 ? 'Explore as far as you like' : t < 6.2 ? 'Tap “Return to anchor”' : 'Back at the checkpoint, no Unwind used');
+    } },
+    blink: { T: 7.5, draw(g, t) {
+      const [x, y] = puKf(t, [[0, 0, 2], [3.5, 7, 2], [4.5, 7, 2], [4.51, 4, 2], [7.5, 4, 2]]);
+      g.row(PU_ROW(10), i => i <= x + 0.5);
+      if (t >= 4.5 && t < 5.2) g.ring(4, 2, (t - 4.5) / 0.7);
+      g.pill('✨ Blink', t >= 3.6 && t < 4.5);
+      g.p(x, y);
+      g.cap(t < 3.5 ? 'Walk forward…' : t < 4.5 ? 'Tap Blink to retreat instantly' : 'Jumped back 2–3 cells, no Unwind used');
+    } },
+    crystal: { T: 8, draw(g, t) {
+      const [x, y] = puKf(t, [[0, 0, 2], [2.5, 4, 2], [4.5, 7, 2], [5.5, 7, 2], [5.8, 6, 2], [8, 6, 2]]);
+      g.row(PU_ROW(8));
+      if (t < 2.5) g.em('💎', 4, 2);
+      if (t >= 2.5 && t < 3.6) g.em('+3', 4, 2 - (t - 2.5) * 0.9, 1 - (t - 2.5) / 1.1);
+      g.pill('Unwinds: ' + (t < 2.5 ? 3 : t < 5.5 ? 6 : 5), (t >= 2.5 && t < 3.6) || (t >= 5.5 && t < 6.3));
+      g.p(x, y);
+      g.cap(t < 2.5 ? 'Walk into the crystal' : t < 4.5 ? '💎 +1 and the +2 bonus = +3 Unwinds' : t < 5.5 ? 'Dead end ahead!' : 'Unwind steps you back one cell');
+    } },
+    key: { T: 11, draw(g, t) {
+      const [x, y] = puKf(t, [[0, 0, 2], [2, 3, 2], [3.5, 3, 0], [4, 3, 0], [5.5, 3, 2], [7, 6, 2], [8.5, 9, 2], [11, 9, 2]]);
+      const has = t >= 3.5;
+      g.row([...PU_ROW(10), [3, 1], [3, 0]]);
+      if (!has) g.em('🗝️', 3, 0);
+      g.em(has ? '🔓' : '🔒', 6.5, 2);
+      g.em('🏁', 9, 2);
+      g.pill('Unwinds: ' + (t < 3.5 ? 3 : t < 5.5 ? 5 : 3), (t >= 3.5 && t < 4.6) || (t >= 5.5 && t < 6.2));
+      g.p(x, y);
+      g.cap(t < 3.5 ? 'Detour into the dead end for the key' : t < 4.6 ? 'Key found: Unwinds topped up (+2 bonus)' : t < 7 ? 'Unwind back out to the main route' : 'The gate is open, head for the exit');
+    } },
+    torch: { T: 9, draw(g, t) {
+      const [x, y] = puKf(t, PU_WALK);
+      g.row(PU_ROW(10));
+      if (t < 3) g.em('🔥', 4, 2);
+      g.em('💎', 7, 2);
+      g.p(x, y);
+      g.fog(x, y, PU_LIGHT(t));
+      g.cap(t < 3 ? 'Walk into the torch' : t < 6.3 ? 'Wider light for a few seconds' : 'The light fades back');
+    } },
+    lantern: { T: 9, draw(g, t) {
+      const [x, y] = puKf(t, PU_WALK);
+      g.row(PU_ROW(10));
+      if (t < 3) g.em('🏮', 4, 2);
+      g.em('💎', 7, 2); g.em('⚓', 9, 2);
+      g.p(x, y);
+      g.fog(x, y, PU_LIGHT(t));
+      if (t >= 3.3 && t < 6.8) [[7, 2], [9, 2]].forEach(([lx, ly]) => { g.dot(lx, ly); g.ring(lx, ly, (t * 1.2) % 1); });
+      g.cap(t < 3 ? 'Walk into the lantern' : t < 6.3 ? 'Wider light + nearby loot on the mini-map' : 'The light fades back');
+    } },
+    compass: { T: 8, draw(g, t) {
+      const [x, y] = puKf(t, [[0, 0, 2], [1.5, 2, 2], [5.5, 6, 2], [8, 6, 2]]);
+      g.row(PU_ROW(10));
+      if (t < 1.5) g.em('🧭', 2, 2);
+      g.p(x, y);
+      g.fog(x, y, 1.5);
+      if (t >= 1.5 && t < 5.5) g.tri(x + 0.95, y, 1 + 0.15 * Math.sin(t * 8), 1 - puSeg(t, 5, 5.5));
+      g.cap(t < 1.5 ? 'Walk into the compass shard' : t < 5 ? 'Arrow points to unexplored ground' : 'The arrow fades after a few seconds');
+    } },
+    trapper: { T: 8, draw(g, t) {
+      const [x, y] = puKf(t, [[0, 0, 2], [2, 3, 2], [3, 3, 0], [8, 3, 0]]);
+      g.row([...PU_ROW(10), [3, 1], [3, 0], [7, 3]]);
+      if (t < 3) g.em('🔦', 3, 0);
+      g.p(x, y);
+      g.fog(x, y, 1.6);
+      const u = puSeg(t, 3.2, 4);
+      if (t >= 3.2) { g.line(3, 0, 7, 3, u); if (u >= 1) g.em(t < 4.6 ? '❔' : '✅', 7, 3); }
+      g.cap(t < 3 ? 'Walk into the kit' : t < 4.6 ? 'Used up: it scouts another dead end' : 'Marked: loot there, but not what it is');
+    } }
+  };
+
+  function startPowerupAnim(type, canvas) {
+    stopPowerupAnim();
+    const sc = PU_SCENES[type];
+    if (!sc || !canvas.getContext) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = PU_W * dpr; canvas.height = PU_H * dpr;
+    const c2 = canvas.getContext('2d');
+    c2.scale(dpr, dpr);
+    const cs = getComputedStyle(document.documentElement);
+    const v = (n, d) => cs.getPropertyValue(n).trim() || d;
+    const col = { cell: v('--border', '#232A3B'), lit: 'rgba(58,219,196,.28)', teal: v('--teal', '#3ADBC4'), text: v('--text', '#E7ECF3'), muted: v('--text-muted', '#8A93A6'), border: v('--border', '#232A3B') };
+    const g = puMakeG(c2, col);
+    const frame = t => {
+      c2.clearRect(0, 0, PU_W, PU_H);
+      c2.fillStyle = 'rgba(0,0,0,.28)'; c2.fillRect(0, 0, PU_W, PU_H);
+      sc.draw(g, t);
+    };
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { frame(sc.T * 0.45); return; }
+    const t0 = performance.now();
+    const tick = now => {
+      if (!canvas.isConnected) { puAnimRAF = 0; return; }
+      if (canvas.offsetParent !== null) frame(((now - t0) / 1000) % sc.T);
+      puAnimRAF = requestAnimationFrame(tick);
+    };
+    puAnimRAF = requestAnimationFrame(tick);
+  }
+
   let powerupSelected = null;
   let powerupSig = null;
 
@@ -6742,10 +6923,15 @@
         const title = document.createElement('b'); title.className = 'pu-title'; title.textContent = info.emoji + ' ' + info.name;
         const what = document.createElement('span'); what.textContent = info.what;
         const how = document.createElement('span'); how.className = 'pu-how'; how.textContent = 'How it works: ' + info.how;
-        infoEl.append(title, what, how);
+        const cv = document.createElement('canvas');
+        cv.className = 'powerup-anim';
+        cv.setAttribute('aria-hidden', 'true');
+        infoEl.append(cv, title, what, how);
         infoEl.style.display = '';
+        startPowerupAnim(powerupSelected, cv);
       } else {
         infoEl.style.display = 'none';
+        stopPowerupAnim();
       }
     }
   }
