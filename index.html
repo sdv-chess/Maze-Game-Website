@@ -2158,6 +2158,7 @@
         <div class="powerup-list" id="powerupList"></div>
         <div class="powerup-info" id="powerupInfo" style="display:none;" role="region" aria-live="polite"></div>
         <p class="field-note" id="powerupEmpty" style="display:none;">No power-ups in this maze.</p>
+        <p class="field-note">Every power-up you pick up also gives you +2 Unwinds.</p>
       </div>
 
       <div class="card" id="challengeCard">
@@ -2280,7 +2281,7 @@
         </section>
         <section>
           <h4>Collectibles</h4>
-          <p><b>💎 Crystal</b> is +1 unwind, permanently, for the rest of the run. <b>✨ Blink charge</b> is a stash of one-time instant retreats — tap "✨ Blink" anytime afterward to jump 2–3 cells back along the path you've already walked, without spending an Unwind. <b>⚓ Anchor</b> drops a checkpoint the instant you collect it; "⚓ Return to anchor" then teleports you back there whenever you like, as many times as you want, and never touches your Unwind budget either.</p>
+          <p>Every pickup also gives a bonus of +2 unwinds on top of its own effect. <b>💎 Crystal</b> is +1 unwind, permanently, for the rest of the run (+3 with the pickup bonus). <b>✨ Blink charge</b> is a stash of one-time instant retreats — tap "✨ Blink" anytime afterward to jump 2–3 cells back along the path you've already walked, without spending an Unwind. <b>⚓ Anchor</b> drops a checkpoint the instant you collect it; "⚓ Return to anchor" then teleports you back there whenever you like, as many times as you want, and never touches your Unwind budget either.</p>
           <p>A few pieces of loot only appear once Fog of war is also on, since they're all about seeing further: <b>🔥 Torch</b> and its rarer upgrade <b>🏮 Lantern</b> both widen your lit radius for a while — a Lantern also marks any other uncollected loot inside that radius on the mini-map. <b>🧭 Compass shard</b> briefly points an arrow toward the nearest place you haven't explored yet (or straight at the exit if there's nowhere left nearby to discover). <b>🔦 Trapper's kit</b> is consumed the moment you pick it up — it scouts a different nearby unexplored dead end and marks whether it holds real loot or is empty, without saying what the loot is.</p>
         </section>
       </div>
@@ -2753,6 +2754,7 @@
   const TORCH_VISION_BOOST = 1.6;   // added to FOG_LIT_RADIUS while a torch (or lantern) is active
   const TORCH_BOOST_DURATION = 9000; // ms — also the Lantern's radius-boost duration, since it's the torch effect plus a bonus
   const COMPASS_DURATION = 4000;    // ms the compass arrow cue stays on screen after pickup
+  const POWERUP_BONUS_UNWINDS = 2;  // every pickup (key included) also grants this many extra Unwinds
   const BLINK_MIN_STEPS = 2;        // Blink retreats 2-3 cells — never a fixed distance, so it doesn't play identically every time
   const BLINK_MAX_STEPS = 3;
 
@@ -4825,6 +4827,11 @@
       flagItemPickup('🗝️ Key found — the gate ahead is open.');
       ensureEscapeBudget(item.escapeCost || 1);
     }
+    // Every pickup also grants bonus Unwinds on top of its own effect. For
+    // the key this lands after the escape-budget top-up above, so the bonus
+    // is added on top of whatever the top-up left you with.
+    state.unwindLimit += POWERUP_BONUS_UNWINDS;
+    syncUnwindButton();
     return true;
   }
 
@@ -5755,7 +5762,7 @@
     if (navigator.vibrate) navigator.vibrate(40);
     playArrivalChime();
     if (!itemPickupToast || !itemPickupText) return;
-    itemPickupText.textContent = message;
+    itemPickupText.textContent = message + ' Bonus: +' + POWERUP_BONUS_UNWINDS + ' unwinds.';
     itemPickupToast.classList.add('show');
     clearTimeout(itemPickupTimer);
     itemPickupTimer = setTimeout(() => itemPickupToast.classList.remove('show'), 1800);
@@ -6639,9 +6646,9 @@
   const POWERUP_INFO = {
     key:      { emoji: '🗝️', name: 'Key',
                 what: 'Opens the locked gate (🔒) that blocks part of the route to the exit torch.',
-                how: 'Walk into the dead end that holds it to pick it up. It is mandatory, so it is never a trap: picking it up tops your Unwinds up to cover the whole walk back out.' },
+                how: 'Walk into the dead end that holds it to pick it up. It is mandatory, so it is never a trap: picking it up tops your Unwinds up to cover the whole walk back out, and then adds the +2 bonus on top.' },
     crystal:  { emoji: '💎', name: 'Crystal',
-                what: '+1 Unwind, permanently, for the rest of the run.',
+                what: '+1 Unwind, permanently, for the rest of the run (on top of the +2 bonus every power-up gives, so +3 in total).',
                 how: 'Collected automatically when you step on it. Use it later with the 🔙 Unwind button (or Backspace) to step back one cell.' },
     blink:    { emoji: '✨', name: 'Blink charge',
                 what: 'A banked emergency escape that instantly retreats you 2–3 cells back along the path you already walked.',
