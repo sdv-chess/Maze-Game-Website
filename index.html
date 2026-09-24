@@ -3816,7 +3816,11 @@
       if (!pathPos.has(walker)) continue;
       const branchIdx = pathPos.get(walker);
       if (branchIdx < gatePathIndex - 1) {
-        return { keyDeadEnd: dcell, gateEdge: gateInfo };
+        // Also hand back the solution route itself, so the key pickup can work
+        // out how far the player really has to retreat to get back onto it
+        // (see collectItemAt) instead of only to the nearest junction.
+        const mainPathKeys = new Set(mainPath.map(ci => `${ci % cols},${Math.floor(ci / cols)}`));
+        return { keyDeadEnd: dcell, gateEdge: gateInfo, mainPathKeys };
       }
     }
     return null;
@@ -3867,6 +3871,7 @@
     state.items = {};
     state.gates = [];
     state.hasKey = false;
+    state.keyMainPath = null;
     state.itemsCollected = new Set();
     state.scoutedDeadEnds = new Map();
     if (!enabled) return;
@@ -3886,6 +3891,7 @@
       const setup = findKeyGateSetup(cells, cols, rows, deadEnds, rand);
       if (setup) {
         state.gates.push(setup.gateEdge);
+        state.keyMainPath = setup.mainPathKeys;
         const d = setup.keyDeadEnd;
         state.items[`${d.x},${d.y}`] = { type: 'key', escapeCost: branchDepth(cells, cols, rows, d.x, d.y) };
       }
@@ -4825,7 +4831,22 @@
       // top up the budget to cover the full retreat, however deep it is.
       state.hasKey = true;
       flagItemPickup('🗝️ Key found — the gate ahead is open.');
-      ensureEscapeBudget(item.escapeCost || 1);
+      // escapeCost only measures the walk back to the nearest junction, which
+      // is often still inside a dead side-branch (its other exits lead
+      // nowhere), so it can badly undercount. What actually guarantees a way
+      // on is getting back onto the solution route, so measure that along the
+      // path the player really walked here, and cover whichever is larger.
+      let keyCost = item.escapeCost || 1;
+      if (state.keyMainPath) {
+        const log = state.pathLog;
+        for (let i = log.length - 2; i >= 0; i--) {
+          if (state.keyMainPath.has(log[i][0] + ',' + log[i][1])) {
+            keyCost = Math.max(keyCost, log.length - 1 - i);
+            break;
+          }
+        }
+      }
+      ensureEscapeBudget(keyCost);
     }
     // Every pickup also grants bonus Unwinds on top of its own effect. For
     // the key this lands after the escape-budget top-up above, so the bonus
@@ -6646,7 +6667,7 @@
   const POWERUP_INFO = {
     key:      { emoji: '🗝️', name: 'Key',
                 what: 'Opens the locked gate (🔒) that blocks part of the route to the exit torch.',
-                how: 'Walk into the dead end that holds it to pick it up. It is mandatory, so it is never a trap: picking it up tops your Unwinds up to cover the whole walk back out, and then adds the +2 bonus on top.' },
+                how: 'Walk into the dead end that holds it to pick it up. It is mandatory, so it is never a trap: picking it up tops your Unwinds up to cover the whole walk back to the main route (not just the nearest junction), and then adds the +2 bonus on top.' },
     crystal:  { emoji: '💎', name: 'Crystal',
                 what: '+1 Unwind, permanently, for the rest of the run (on top of the +2 bonus every power-up gives, so +3 in total).',
                 how: 'Collected automatically when you step on it. Use it later with the 🔙 Unwind button (or Backspace) to step back one cell.' },
