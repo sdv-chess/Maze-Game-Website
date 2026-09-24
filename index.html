@@ -415,6 +415,28 @@
   .shop-buy { width: auto; padding: 8px 14px; font-size: 12.5px; flex: none; }
   .shop-buy:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  /* Power-ups box — lists which collectible types exist in the current maze;
+     tapping one opens a short how-it-works panel underneath. */
+  .powerup-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .powerup-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px;
+    color: var(--text); font-family: var(--font-mono); font-size: 12px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .powerup-chip:hover { border-color: var(--teal); }
+  .powerup-chip[aria-expanded="true"] { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; }
+  .powerup-chip .pu-emoji { font-size: 15px; line-height: 1; }
+  .powerup-chip .pu-count { color: var(--text-muted); font-size: 11px; }
+  .powerup-chip.all-collected { opacity: 0.55; }
+  .powerup-info {
+    margin-top: 10px; padding: 10px 12px; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 10px;
+    font-size: 12.5px; line-height: 1.55; color: var(--text);
+  }
+  .powerup-info b.pu-title { display: block; margin-bottom: 4px; }
+  .powerup-info .pu-how { color: var(--text-muted); display: block; margin-top: 4px; }
+
   .stash-panel {
     display: flex;
     flex-direction: column;
@@ -2129,6 +2151,13 @@
           <div class="stats-row"><span class="label">Moves</span><span class="value" id="statMoves">0</span></div>
           <div class="stats-row"><span class="label" id="statTimeLabel">Time</span><span class="value" id="statTime">00:00</span></div>
         </div>
+      </div>
+
+      <div class="card" id="powerupCard">
+        <h2>✨ Power-ups in this maze</h2>
+        <div class="powerup-list" id="powerupList"></div>
+        <div class="powerup-info" id="powerupInfo" style="display:none;" role="region" aria-live="polite"></div>
+        <p class="field-note" id="powerupEmpty" style="display:none;">No power-ups in this maze.</p>
       </div>
 
       <div class="card" id="challengeCard">
@@ -6601,12 +6630,105 @@
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
+  // ---------- Power-ups box ----------
+  // Lists every collectible type that exists in the current maze (with how
+  // many are still uncollected). Rebuilt only when that set of counts
+  // changes — checked once per frame via a cheap signature string, so it
+  // stays correct across new mazes, restarts, race joins and pickups
+  // without needing a hook in each of those paths.
+  const POWERUP_INFO = {
+    key:      { emoji: '🗝️', name: 'Key',
+                what: 'Opens the locked gate (🔒) that blocks part of the route to the exit torch.',
+                how: 'Walk into the dead end that holds it to pick it up. It is mandatory, so it is never a trap: picking it up tops your Unwinds up to cover the whole walk back out.' },
+    crystal:  { emoji: '💎', name: 'Crystal',
+                what: '+1 Unwind, permanently, for the rest of the run.',
+                how: 'Collected automatically when you step on it. Use it later with the 🔙 Unwind button (or Backspace) to step back one cell.' },
+    blink:    { emoji: '✨', name: 'Blink charge',
+                what: 'A banked emergency escape that instantly retreats you 2–3 cells back along the path you already walked.',
+                how: 'Picking it up only stores a charge. Tap "✨ Blink" whenever you need it — it does not spend any Unwinds.' },
+    anchor:   { emoji: '⚓', name: 'Anchor',
+                what: 'Drops a checkpoint right where you pick it up.',
+                how: 'Tap "⚓ Return to anchor" to teleport back to it, as many times as you like, without touching your Unwind budget. A second anchor just moves the checkpoint.' },
+    torch:    { emoji: '🔥', name: 'Torch',
+                what: 'Widens your lit radius in fog of war for about 9 seconds.',
+                how: 'Collected automatically when you step on it, and it lights up immediately. Only appears when fog of war is on.' },
+    lantern:  { emoji: '🏮', name: 'Lantern',
+                what: 'A rarer upgrade on the Torch: the same wider light for about 9 seconds, plus any other uncollected loot inside that light shows on the mini-map.',
+                how: 'Collected automatically when you step on it. Only appears when fog of war is on.' },
+    compass:  { emoji: '🧭', name: 'Compass shard',
+                what: 'Briefly shows an arrow pointing to the nearest place you have not explored yet — or straight at the exit if nothing nearby is left to discover.',
+                how: 'Collected automatically, and the arrow appears for about 4 seconds, so pick it up when you are ready to follow it. Only appears when fog of war is on.' },
+    trapper:  { emoji: '🔦', name: "Trapper's kit",
+                what: 'Scouts a different, nearby unexplored dead end and marks whether it holds loot or is empty, without saying what the loot is.',
+                how: 'Used up the moment you pick it up. Only appears when fog of war is on.' }
+  };
+  const POWERUP_ORDER = ['key', 'crystal', 'blink', 'anchor', 'torch', 'lantern', 'compass', 'trapper'];
+  let powerupSelected = null;
+  let powerupSig = null;
+
+  function syncPowerupBox() {
+    const listEl = document.getElementById('powerupList');
+    if (!listEl) return;
+    const items = state.items || {};
+    const collected = state.itemsCollected || new Set();
+    const total = {}, left = {};
+    Object.keys(items).forEach(k => {
+      const t = items[k].type;
+      total[t] = (total[t] || 0) + 1;
+      if (!collected.has(k)) left[t] = (left[t] || 0) + 1;
+    });
+    const sig = POWERUP_ORDER.map(t => (total[t] || 0) + ':' + (left[t] || 0)).join('|');
+    if (sig === powerupSig) return;
+    powerupSig = sig;
+
+    const infoEl = document.getElementById('powerupInfo');
+    const emptyEl = document.getElementById('powerupEmpty');
+    const present = POWERUP_ORDER.filter(t => total[t] && POWERUP_INFO[t]);
+    if (powerupSelected && !present.includes(powerupSelected)) powerupSelected = null;
+
+    listEl.innerHTML = '';
+    present.forEach(t => {
+      const info = POWERUP_INFO[t];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'powerup-chip' + (left[t] ? '' : ' all-collected');
+      btn.setAttribute('aria-expanded', String(powerupSelected === t));
+      const e = document.createElement('span'); e.className = 'pu-emoji'; e.textContent = info.emoji;
+      const n = document.createElement('span'); n.textContent = '- ' + info.name;
+      const c = document.createElement('span'); c.className = 'pu-count';
+      c.textContent = left[t] ? (total[t] > 1 ? '×' + left[t] : '') : '(collected)';
+      btn.append(e, n, c);
+      btn.addEventListener('click', () => {
+        powerupSelected = (powerupSelected === t) ? null : t;
+        powerupSig = null; // force a rebuild so aria-expanded / info panel update
+        syncPowerupBox();
+      });
+      listEl.appendChild(btn);
+    });
+
+    if (emptyEl) emptyEl.style.display = present.length ? 'none' : '';
+    if (infoEl) {
+      if (powerupSelected) {
+        const info = POWERUP_INFO[powerupSelected];
+        infoEl.innerHTML = '';
+        const title = document.createElement('b'); title.className = 'pu-title'; title.textContent = info.emoji + ' ' + info.name;
+        const what = document.createElement('span'); what.textContent = info.what;
+        const how = document.createElement('span'); how.className = 'pu-how'; how.textContent = 'How it works: ' + info.how;
+        infoEl.append(title, what, how);
+        infoEl.style.display = '';
+      } else {
+        infoEl.style.display = 'none';
+      }
+    }
+  }
+
   // requestAnimationFrame(animLoop) only reschedules the NEXT frame if this
   // call returns normally — an uncaught error in draw() would otherwise
   // stop the whole render loop permanently (nothing redraws again until a
   // manual page reload). The try/catch keeps a single bad frame from
   // taking the whole game down with it.
   function animLoop() {
+    try { syncPowerupBox(); } catch (err) { console.error('syncPowerupBox error:', err); }
     try {
       draw();
     } catch (err) {
