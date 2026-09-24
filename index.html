@@ -1716,6 +1716,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Install app (shown only when the game isn't already running as an installed app) -->
+    <div class="card" id="installCard" style="display:none; margin-top:14px;">
+      <h2>Get the app</h2>
+      <button class="primary" id="btnInstallApp" type="button" style="width:100%;">📲 Install Deep Delve</button>
+      <p class="field-note" id="installNote">Play full-screen from your home screen or Dock. No app store needed.</p>
+    </div>
   </div>
 </div>
 
@@ -1735,6 +1742,7 @@
           <button class="game-menu-item" id="btnGoFriends" type="button"><span class="game-menu-emoji">👥</span><span class="game-menu-label">Friends</span><span class="friend-count-pill" id="friendReqPill" style="display:none;"></span></button>
           <button class="game-menu-item" id="btnGoShopMode" type="button"><span class="game-menu-emoji">🪙</span><span class="game-menu-label">Shop</span><span class="token-badge token-badge-count">0</span></button>
           <button class="game-menu-item" id="btnModeToAccount" type="button"><span class="game-menu-emoji">⚙️</span><span class="game-menu-label">Account</span></button>
+          <button class="game-menu-item" id="btnInstallMenu" type="button" style="display:none;"><span class="game-menu-emoji">📲</span><span class="game-menu-label">Install app</span></button>
         </div>
       </div>
     </header>
@@ -11228,12 +11236,58 @@
 })();
 </script>
 <script>
-  // Register the service worker so the game is installable as an app.
+  // ---------- PWA: service worker + in-page "Install app" button ----------
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () { /* install still works as a plain site */ });
+      navigator.serviceWorker.register('sw.js').catch(function () { /* still works as a plain site */ });
     });
   }
+
+  (function () {
+    var card = document.getElementById('installCard');
+    var cardBtn = document.getElementById('btnInstallApp');
+    var note = document.getElementById('installNote');
+    var menuBtn = document.getElementById('btnInstallMenu');
+    var deferred = null;
+
+    function isInstalled() {
+      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    }
+    function setVisible(show) {
+      if (card) card.style.display = show ? '' : 'none';
+      if (menuBtn) menuBtn.style.display = show ? '' : 'none';
+    }
+    function helpText() {
+      var ua = navigator.userAgent || '';
+      var iOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (iOS) return 'On iPhone/iPad: tap the Share button, then "Add to Home Screen".';
+      if (/firefox/i.test(ua)) return 'Firefox on Android: open the menu and tap "Install". On a computer, open this page in Chrome, Edge, Brave or Safari to install it.';
+      if (/safari/i.test(ua) && !/chrome|chromium|crios|android/i.test(ua)) return 'In Safari on Mac: choose File \u2192 Add to Dock.';
+      return 'Open your browser\'s menu and choose "Install app" (or "Add to Home screen").';
+    }
+    async function doInstall(fromMenu) {
+      if (deferred) {
+        deferred.prompt();
+        try { await deferred.userChoice; } catch (e) { /* ignore */ }
+        deferred = null;
+        return;
+      }
+      var msg = helpText();
+      if (fromMenu) alert(msg); else if (note) note.textContent = msg;
+    }
+
+    if (isInstalled()) return;          // already running as an app: hide everything
+    setVisible(true);
+
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();               // keep the event so our own button can trigger the native prompt
+      deferred = e;
+    });
+    window.addEventListener('appinstalled', function () { deferred = null; setVisible(false); });
+
+    if (cardBtn) cardBtn.addEventListener('click', function () { doInstall(false); });
+    if (menuBtn) menuBtn.addEventListener('click', function () { doInstall(true); });
+  })();
 </script>
 </body>
 </html>
