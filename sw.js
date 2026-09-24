@@ -1,6 +1,6 @@
 // Deep Delve service worker.
 // Bump CACHE_VERSION whenever you want to force every install to drop old caches.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE = 'deep-delve-' + CACHE_VERSION;
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
