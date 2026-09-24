@@ -10587,6 +10587,10 @@
     };
     const channel = sb.channel(`race-${code}`, { config: { presence: { key: myId }, broadcast: { self: false } } });
     state.race.channel = channel;
+    // state.race was only just (re)built above, so the visibility pass that
+    // showRaceActiveUI() ran earlier saw active=false. Re-run it now so the
+    // host actually gets the "Start race" button (and joiners the waiting note).
+    updateStartRaceButtonVisibility();
 
     channel.on('broadcast', { event: 'request-info' }, () => {
       if (state.race.code === code && state.race.isHost) broadcastRoomInfo();
