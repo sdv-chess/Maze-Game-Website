@@ -10923,6 +10923,17 @@
     };
     const channel = sb.channel(`race-${code}`, { config: { presence: { key: myId }, broadcast: { self: false } } });
     state.race.channel = channel;
+    // leaveRaceInternal() (called at the top of this function) restores the
+    // player's solo fog preference, which silently switched fog OFF again for
+    // a host right after applyRaceMaze() had turned it on for the room.
+    // Re-apply the room's setting now that the race state is rebuilt. Joiners
+    // still get theirs from the host's room-info; this just covers the host
+    // and reconnects, whose fog setting is already known here.
+    if (isHost || existingRaceState) {
+      state.fogOfWar = !!state.race.fogEnabled;
+      syncFogButton();
+      if (state.mazeReady) draw();
+    }
     // state.race was only just (re)built above, so the visibility pass that
     // showRaceActiveUI() ran earlier saw active=false. Re-run it now so the
     // host actually gets the "Start race" button (and joiners the waiting note).
