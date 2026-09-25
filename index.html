@@ -1059,6 +1059,15 @@
   .modal .win-celebrate { color: var(--teal); font-size: 12.5px; margin: 0 0 16px; font-weight: 600; }
   .modal .max-level-alert { color: var(--gold); font-size: 13px; margin: 0 0 16px; font-weight: 700; }
   .modal .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Host-only rematch dialog */
+  .modal.rematch-modal { max-width: 380px; max-height: 90vh; overflow-y: auto; }
+  .rematch-summary { font-size: 12px; color: var(--text-faint); margin: 0 0 14px; }
+  .rematch-stack { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .rematch-stack > button { width: 100%; }
+  .rematch-stack > button .rematch-sub { display: block; font-size: 11px; font-weight: 400; opacity: 0.75; margin-top: 2px; }
+  .rematch-stack .dim-label { display: block; margin-bottom: 4px; }
+  .rematch-stack .modal-actions { margin-top: 4px; }
   .modal .modal-actions button { flex: 1; min-width: 100px; }
 
   .modal .icon.win-pop { animation: winIconPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -2206,6 +2215,7 @@
             <button class="secondary" id="btnCopyRaceLink">🔗 Copy link</button>
           </div>
           <button class="primary" id="btnHostStartRace" style="display:none;">🚀 Start race</button>
+          <button class="secondary" id="btnHostRematch" style="display:none;">🔄 Rematch</button>
           <p class="field-note" id="raceStartNote" style="display:none;">Waiting for the host to start the race…</p>
           <div id="raceRoster"><p class="lb-empty">Waiting for racers…</p></div>
           <div class="race-chat" id="raceChatPanel">
@@ -2568,6 +2578,7 @@
       <button class="secondary" id="btnWinShare">📤 Share</button>
       <button class="secondary" id="btnWinClose">Close</button>
       <button class="primary" id="btnWinNextLevel" style="display:none;">Next level ▶</button>
+      <button class="primary" id="btnWinRematch" style="display:none;">🔄 Rematch</button>
       <button class="primary" id="btnWinNew">New maze</button>
     </div>
   </div>
@@ -2581,6 +2592,7 @@
     <div class="modal-actions">
       <button class="secondary" id="btnLoseClose">Close</button>
       <button class="primary" id="btnLoseRestart">Try again</button>
+      <button class="primary" id="btnLoseRematch" style="display:none;">🔄 Rematch</button>
       <button class="primary" id="btnLoseNew">New maze</button>
     </div>
   </div>
@@ -2631,6 +2643,49 @@
     <div class="modal-actions">
       <button class="secondary" id="btnConfirmCancel">Cancel</button>
       <button class="primary" id="btnConfirmOk">New maze</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="rematchOverlay">
+  <div class="modal rematch-modal">
+    <div class="icon">🔄</div>
+    <h3>Rematch</h3>
+    <div id="rematchChoice">
+      <p>Everyone in the room gets a brand-new maze. How should it be set up?</p>
+      <p class="rematch-summary" id="rematchSummary"></p>
+      <div class="rematch-stack">
+        <button class="primary" id="btnRematchSame" type="button">Same maze type<span class="rematch-sub">Same size and rules, fresh maze</span></button>
+        <button class="secondary" id="btnRematchChange" type="button">Change settings<span class="rematch-sub">Pick the size, fog, braids and collectibles</span></button>
+        <button class="secondary" id="btnRematchCancel" type="button">Cancel</button>
+      </div>
+    </div>
+    <div id="rematchSettings" style="display:none;">
+      <p>Choose the settings for the next round.</p>
+      <div class="rematch-stack">
+        <div>
+          <span class="dim-label">Maze size</span>
+          <select class="field" id="rematchSize" aria-label="Rematch maze size">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+            <option value="sprint">⚡ Sprint</option>
+            <option value="marathon">🏔️ Marathon</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="row-2" id="rematchCustom" style="display:none;">
+          <div><span class="dim-label">Width (cells)</span><input type="number" class="field" id="rematchWidth" min="5" max="300" value="16" /></div>
+          <div><span class="dim-label">Height (cells)</span><input type="number" class="field" id="rematchHeight" min="5" max="300" value="16" /></div>
+        </div>
+        <button class="secondary" id="btnRematchFog" type="button">🌫️ Fog of war: Off</button>
+        <button class="secondary" id="btnRematchBraid" type="button">🔀 Braided paths: Off</button>
+        <button class="secondary" id="btnRematchItems" type="button">💎 Collectibles: Off</button>
+        <div class="modal-actions">
+          <button class="secondary" id="btnRematchBack" type="button">Back</button>
+          <button class="primary" id="btnRematchStart" type="button">Start rematch</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -3265,6 +3320,7 @@
       braided: false,
       mazeReceived: false,
       startAt: null,
+      round: 0,
       players: {},
       officialTimes: {},
       channel: null
@@ -4251,6 +4307,7 @@
     loseIcon.textContent = '⏱️';
     loseTitle.textContent = "Time's up";
     loseStats.textContent = `Moves: ${state.moves} · Ran out of time at ${formatTime(state.timeLimit)}`;
+    syncRematchButtons();
     loseOverlay.classList.add('show');
     syncUnwindButton();
     syncAnchorButton();
@@ -5033,6 +5090,7 @@
     const atMaxLevel = state.sizeKey === 'level' && state.level >= MAX_LEVEL;
     if (winMaxLevel) winMaxLevel.style.display = atMaxLevel ? 'block' : 'none';
     btnWinNextLevel.style.display = (state.sizeKey === 'level' && !atMaxLevel) ? 'inline-block' : 'none';
+    syncRematchButtons();
     winOverlay.classList.add('show');
     popWinIcon();
     burstConfetti();
@@ -5348,6 +5406,7 @@
     loseIcon.textContent = theme.canvas.fallEmoji || '🕳️';
     loseTitle.textContent = theme.canvas.fallLabel || 'You fell';
     loseStats.textContent = `Moves: ${state.moves} · No unwinds left to escape the dead end`;
+    syncRematchButtons();
     loseOverlay.classList.add('show');
     syncUnwindButton();
     syncAnchorButton();
@@ -9915,6 +9974,7 @@
     }
     raceUIActive = false;
     syncGameHeaderModeButton();
+    syncRematchButtons();
   }
 
   function showRaceActiveUI(code, waiting) {
@@ -10056,6 +10116,7 @@
       const showWaitingNote = state.race.active && !state.race.isHost && !state.race.startAt;
       raceStartNote.style.display = showWaitingNote ? '' : 'none';
     }
+    syncRematchButtons();
   }
 
   function showRaceCountdownOverlay() {
@@ -10129,6 +10190,218 @@
     renderRaceRoster();
     runRaceCountdown(startAt);
   }
+
+
+  // ---------- Live race: host-only rematch ----------
+  // Only the host ever sees a Rematch button (Live race card, plus the win /
+  // lose popups). Pressing it asks: keep the same maze type (same size and
+  // rules, brand-new maze) or change the settings first. Either way the host
+  // broadcasts one 'rematch' event carrying a fresh seed plus the settings,
+  // and every device (host included) runs applyRematch(): new maze, progress
+  // and finish times cleared, movement locked until the host presses Start
+  // race again. Same room, same code, same chat and voice — nobody rejoins.
+  const btnHostRematch = document.getElementById('btnHostRematch');
+  const btnWinRematch = document.getElementById('btnWinRematch');
+  const btnLoseRematch = document.getElementById('btnLoseRematch');
+  const rematchOverlay = document.getElementById('rematchOverlay');
+  const rematchChoice = document.getElementById('rematchChoice');
+  const rematchSettings = document.getElementById('rematchSettings');
+  const rematchSummary = document.getElementById('rematchSummary');
+  const rematchSize = document.getElementById('rematchSize');
+  const rematchCustom = document.getElementById('rematchCustom');
+  const rematchWidth = document.getElementById('rematchWidth');
+  const rematchHeight = document.getElementById('rematchHeight');
+  const btnRematchFog = document.getElementById('btnRematchFog');
+  const btnRematchBraid = document.getElementById('btnRematchBraid');
+  const btnRematchItems = document.getElementById('btnRematchItems');
+  let rematchDraft = { fog: false, braid: false, items: false };
+
+  function syncRematchButtons() {
+    const isHost = !!(state.race && state.race.active && state.race.isHost);
+    // On the Live race card only once the race has actually started (before
+    // that, "Start race" is the button); in the win/lose popups always.
+    if (btnHostRematch) btnHostRematch.style.display = (isHost && state.race.startAt) ? '' : 'none';
+    if (btnWinRematch) btnWinRematch.style.display = isHost ? '' : 'none';
+    if (btnLoseRematch) btnLoseRematch.style.display = isHost ? '' : 'none';
+  }
+
+  function raceSizeLabel(cols, rows) {
+    const names = { small: 'Small', medium: 'Medium', large: 'Large', sprint: 'Sprint', marathon: 'Marathon' };
+    const key = Object.keys(names).find(k => SIZES[k] && SIZES[k].cols === cols && SIZES[k].rows === rows);
+    return (key ? names[key] : 'Custom') + ' (' + cols + '×' + rows + ')';
+  }
+
+  function raceSummaryText(cfg) {
+    return raceSizeLabel(cfg.cols, cfg.rows) +
+      ' · Fog ' + (cfg.fogEnabled ? 'on' : 'off') +
+      ' · Braided ' + (cfg.braided ? 'on' : 'off') +
+      ' · Collectibles ' + (cfg.braided && cfg.itemsEnabled ? 'on' : 'off');
+  }
+
+  function currentRoomConfig() {
+    return {
+      cols: state.race.cols,
+      rows: state.race.rows,
+      braided: !!state.race.braided,
+      itemsEnabled: !!(state.race.braided && state.race.itemsEnabled),
+      fogEnabled: !!state.race.fogEnabled
+    };
+  }
+
+  function syncRematchDraftButtons() {
+    btnRematchFog.textContent = rematchDraft.fog ? '🌫️ Fog of war: On' : '🌫️ Fog of war: Off';
+    btnRematchBraid.textContent = rematchDraft.braid ? '🔀 Braided paths: On' : '🔀 Braided paths: Off';
+    btnRematchItems.style.display = rematchDraft.braid ? '' : 'none';
+    btnRematchItems.textContent = (rematchDraft.braid && rematchDraft.items) ? '💎 Collectibles: On' : '💎 Collectibles: Off';
+    rematchCustom.style.display = rematchSize.value === 'custom' ? '' : 'none';
+  }
+
+  function openRematchDialog() {
+    if (!state.race.active || !state.race.isHost) return;
+    const cfg = currentRoomConfig();
+    rematchSummary.textContent = 'Current: ' + raceSummaryText(cfg);
+    // Pre-fill the "change settings" panel with what the room is using now.
+    const key = ['small', 'medium', 'large', 'sprint', 'marathon'].find(k => SIZES[k].cols === cfg.cols && SIZES[k].rows === cfg.rows);
+    rematchSize.value = key || 'custom';
+    rematchWidth.value = cfg.cols;
+    rematchHeight.value = cfg.rows;
+    rematchDraft = { fog: cfg.fogEnabled, braid: cfg.braided, items: cfg.itemsEnabled };
+    syncRematchDraftButtons();
+    rematchChoice.style.display = '';
+    rematchSettings.style.display = 'none';
+    rematchOverlay.classList.add('show');
+  }
+
+  function closeRematchDialog() { rematchOverlay.classList.remove('show'); }
+
+  // Entry point for every Rematch button. If someone is still mid-race, make
+  // the host confirm first, since a rematch ends the current round for all.
+  function requestRematch() {
+    if (!state.race.active || !state.race.isHost) return;
+    winOverlay.classList.remove('show');
+    loseOverlay.classList.remove('show');
+    const stillRacing = state.race.startAt && Object.values(state.race.players || {}).some(p => !p.finished);
+    if (stillRacing) {
+      showConfirm({
+        title: 'End this round?',
+        body: "Some racers haven't finished yet. A rematch ends the current round for everyone in the room.",
+        okLabel: 'Continue',
+        onConfirm: openRematchDialog
+      });
+    } else {
+      openRematchDialog();
+    }
+  }
+
+  function hostStartRematch(cfg) {
+    if (!state.race.active || !state.race.isHost) return;
+    const round = (state.race.round || 0) + 1;
+    const braided = !!cfg.braided;
+    const payload = {
+      round,
+      seed: stringToSeed('deep-delve-race|' + state.race.code + '|rematch' + round + '|' + Date.now()),
+      cols: cfg.cols,
+      rows: cfg.rows,
+      braided,
+      itemsEnabled: braided && !!cfg.itemsEnabled,
+      fogEnabled: !!cfg.fogEnabled
+    };
+    if (state.race.channel) {
+      state.race.channel.send({ type: 'broadcast', event: 'rematch', payload }).catch(() => {});
+    }
+    applyRematch(payload);
+  }
+
+  // Runs on every device in the room, host included.
+  function applyRematch(p) {
+    if (!state.race.active || !p || (p.round || 0) <= (state.race.round || 0)) return;
+    // A joiner still loading the first maze will get the new settings from
+    // room-info anyway (the host's state is already updated).
+    if (!state.race.isHost && !state.race.mazeReceived) return;
+    recordBattleResult();   // log the round that just ended
+    clearInterval(raceCountdownInterval);
+    raceCountdownInterval = null;
+    hideRaceCountdownOverlay();
+    clearTimeout(winAutoAdvanceTimer);
+    clearTimeout(loseAutoAdvanceTimer);
+    clearTimeout(raceMoveThrottleTimer);
+    raceMoveThrottleTimer = null;
+    winOverlay.classList.remove('show');
+    loseOverlay.classList.remove('show');
+    clearConfetti();
+    closeRematchDialog();
+    Object.assign(state.race, {
+      round: p.round,
+      seed: p.seed,
+      cols: p.cols,
+      rows: p.rows,
+      braided: !!p.braided,
+      itemsEnabled: !!p.itemsEnabled,
+      fogEnabled: !!p.fogEnabled,
+      startAt: null,
+      locked: false,
+      officialTimes: {},
+      mazeReceived: true
+    });
+    applyRaceMaze(p.cols, p.rows, p.seed, state.race.braided, state.race.itemsEnabled, state.race.fogEnabled);
+    // Clear everyone's finished flags locally right away; presence then
+    // confirms it (each device re-tracks its own reset position below).
+    const players = state.race.players || {};
+    Object.keys(players).forEach(id => {
+      players[id] = Object.assign({}, players[id], { finished: false, time: null, moves: 0, x: 0, y: 0 });
+    });
+    updateRacePresence();
+    renderRaceRoster();
+    updateStartRaceButtonVisibility();
+    raceActiveNote.textContent = state.race.isHost
+      ? 'Rematch ready — press Start race when everyone is set.'
+      : 'The host started a rematch — new maze! Waiting for the host to start.';
+    raceActiveNote.className = 'field-note success';
+    showScreen('game');
+  }
+
+  [btnHostRematch, btnWinRematch, btnLoseRematch].forEach(b => { if (b) b.addEventListener('click', requestRematch); });
+  document.getElementById('btnRematchCancel').addEventListener('click', closeRematchDialog);
+  document.getElementById('btnRematchSame').addEventListener('click', () => {
+    const cfg = currentRoomConfig();
+    closeRematchDialog();
+    hostStartRematch(cfg);
+  });
+  document.getElementById('btnRematchChange').addEventListener('click', () => {
+    rematchChoice.style.display = 'none';
+    rematchSettings.style.display = '';
+  });
+  document.getElementById('btnRematchBack').addEventListener('click', () => {
+    rematchSettings.style.display = 'none';
+    rematchChoice.style.display = '';
+  });
+  rematchSize.addEventListener('change', syncRematchDraftButtons);
+  btnRematchFog.addEventListener('click', () => { rematchDraft.fog = !rematchDraft.fog; syncRematchDraftButtons(); });
+  btnRematchBraid.addEventListener('click', () => {
+    rematchDraft.braid = !rematchDraft.braid;
+    if (!rematchDraft.braid) rematchDraft.items = false;
+    syncRematchDraftButtons();
+  });
+  btnRematchItems.addEventListener('click', () => { rematchDraft.items = !rematchDraft.items; syncRematchDraftButtons(); });
+  document.getElementById('btnRematchStart').addEventListener('click', () => {
+    let dims;
+    if (rematchSize.value === 'custom') {
+      dims = {
+        cols: Math.max(5, Math.min(300, parseInt(rematchWidth.value, 10) || 16)),
+        rows: Math.max(5, Math.min(300, parseInt(rematchHeight.value, 10) || 16))
+      };
+    } else {
+      dims = SIZES[rematchSize.value] || SIZES.medium;
+    }
+    closeRematchDialog();
+    hostStartRematch({
+      cols: dims.cols,
+      rows: dims.rows,
+      braided: rematchDraft.braid,
+      itemsEnabled: rematchDraft.braid && rematchDraft.items,
+      fogEnabled: rematchDraft.fog
+    });
+  });
 
   function beginRaceClockIfNeeded() {
     if (!state.race.active || state.race.startAt) return;
@@ -10832,7 +11105,7 @@
 
   function broadcastRoomInfo() {
     if (!state.race.channel || !state.race.isHost) return;
-    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled, fogEnabled: state.race.fogEnabled, startAt: state.race.startAt } });
+    state.race.channel.send({ type: 'broadcast', event: 'room-info', payload: { cols: state.race.cols, rows: state.race.rows, seed: state.race.seed, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled, fogEnabled: state.race.fogEnabled, startAt: state.race.startAt, round: state.race.round || 0 } });
   }
 
   // Tears down whatever race channel is currently open, if any, without
@@ -10939,6 +11212,10 @@
       // refuses to move the player while it's true, for host and joiners
       // alike, so nobody gets a head start. See runRaceCountdown below.
       locked: false,
+      // Bumped by a host-triggered rematch (see applyRematch) — carried
+      // across a reconnect so a dropped connection can't replay an old
+      // rematch broadcast on top of a newer round.
+      round: existingRaceState ? (existingRaceState.round || 0) : 0,
       players: {},
       // Host-confirmed finish times survive a reconnect (existingRaceState)
       // so a brief connection blip never un-ranks someone who'd already
@@ -10980,6 +11257,7 @@
       state.race.braided = !!payload.braided;
       state.race.itemsEnabled = !!payload.itemsEnabled;
       state.race.fogEnabled = !!payload.fogEnabled;
+      state.race.round = payload.round || 0;
       // Adopt the host's clock if the race has already started, but never
       // fall back to this device's own Date.now() — that's exactly the
       // per-device clock the shared start line exists to avoid. If the host
@@ -11002,6 +11280,10 @@
       renderRaceRoster();
       updateStartRaceButtonVisibility();
       runRaceCountdown(state.race.startAt);
+    });
+    channel.on('broadcast', { event: 'rematch' }, ({ payload }) => {
+      if (state.race.code !== code || state.race.isHost) return;
+      applyRematch(payload);
     });
     channel.on('broadcast', { event: 'request-start' }, () => {
       if (state.race.code === code && state.race.isHost) beginRaceClockIfNeeded();
@@ -11061,7 +11343,7 @@
           if (state.race.active && state.race.code === code) {
             raceActiveNote.textContent = 'Connection dropped — reconnecting…';
             raceActiveNote.className = 'field-note error';
-            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt, officialTimes: state.race.officialTimes, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled, fogEnabled: state.race.fogEnabled };
+            const snapshot = { myId: state.race.myId, seed: state.race.seed, cols: state.race.cols, rows: state.race.rows, mazeReceived: state.race.mazeReceived, startAt: state.race.startAt, officialTimes: state.race.officialTimes, braided: state.race.braided, itemsEnabled: state.race.itemsEnabled, fogEnabled: state.race.fogEnabled, round: state.race.round || 0 };
             try { channel.unsubscribe(); } catch (e) { /* already gone */ }
             clearTimeout(raceReconnectTimer);
             raceReconnectTimer = setTimeout(() => {
