@@ -1537,6 +1537,48 @@
     z-index: 0;
     pointer-events: none;
   }
+  /* ---------- Glass panels (dark + light mode, desktop + phone) ----------
+     Panels are translucent + blurred so the lit lattice glows softly through them, get a thin
+     accent-tinted border, and a soft spotlight that follows the cursor / finger across the panel. */
+  .card,
+  .maze-panel {
+    background:
+      radial-gradient(280px circle at var(--px, -999px) var(--py, -999px),
+        color-mix(in srgb, var(--teal) 15%, transparent), transparent 70%),
+      linear-gradient(180deg,
+        color-mix(in srgb, var(--panel) 80%, transparent),
+        color-mix(in srgb, var(--panel) 64%, transparent));
+    border-color: color-mix(in srgb, var(--teal) 22%, var(--border));
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    backdrop-filter: blur(12px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 32px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  /* Light mode: frosted white glass with a softer shadow and a gentler spotlight */
+  html.light .card,
+  html.light .maze-panel {
+    background:
+      radial-gradient(280px circle at var(--px, -999px) var(--py, -999px),
+        color-mix(in srgb, var(--teal) 13%, transparent), transparent 70%),
+      linear-gradient(180deg,
+        color-mix(in srgb, var(--panel) 84%, transparent),
+        color-mix(in srgb, var(--panel) 68%, transparent));
+    border-color: color-mix(in srgb, var(--teal) 28%, var(--border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 8px 26px rgba(60, 40, 20, 0.08);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .card:hover,
+    .maze-panel:hover {
+      border-color: color-mix(in srgb, var(--teal) 50%, var(--border));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 10px 32px rgba(0, 0, 0, 0.35),
+                  0 0 26px color-mix(in srgb, var(--teal) 14%, transparent);
+    }
+    html.light .card:hover,
+    html.light .maze-panel:hover {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 8px 26px rgba(60, 40, 20, 0.08),
+                  0 0 22px color-mix(in srgb, var(--teal) 16%, transparent);
+    }
+  }
   .wrap { position: relative; z-index: 1; }
 
   /* Header dot: was a static glow, now a slow breathing pulse — small, cheap, always-on. */
@@ -11799,6 +11841,35 @@
   new MutationObserver(() => { readColor(); if (!raf) { draw(); wake(); } })
     .observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class'] });
   resize();
+})();
+</script>
+<script>
+/* Cursor / finger spotlight inside the glass panels */
+(function () {
+  let active = null;
+  function clear(el) { if (el) { el.style.removeProperty('--px'); el.style.removeProperty('--py'); } }
+  function spot(x, y, target) {
+    const el = target && target.closest ? target.closest('.card, .maze-panel') : null;
+    if (el !== active) { clear(active); active = el; }
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--px', (x - r.left) + 'px');
+    el.style.setProperty('--py', (y - r.top) + 'px');
+  }
+  window.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'touch') return;          // touch handled below (survives scrolling)
+    spot(e.clientX, e.clientY, e.target);
+  }, { passive: true });
+  function onTouch(e) {
+    const t = e.touches && e.touches[0];
+    if (t) spot(t.clientX, t.clientY, document.elementFromPoint(t.clientX, t.clientY));
+  }
+  window.addEventListener('touchstart', onTouch, { passive: true });
+  window.addEventListener('touchmove', onTouch, { passive: true });
+  function off() { clear(active); active = null; }
+  window.addEventListener('touchend', off, { passive: true });
+  window.addEventListener('touchcancel', off, { passive: true });
+  document.documentElement.addEventListener('mouseleave', off);
 })();
 </script>
 </body>
