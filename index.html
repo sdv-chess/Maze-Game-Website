@@ -1527,6 +1527,16 @@
     pointer-events: none;
     opacity: 0.55;
   }
+  /* Cursor-lit lattice: a faint grid sits behind everything; lines, plus-marks and
+     cells light up in the active theme's accent colour as the pointer moves over it. */
+  #gridGlow {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    pointer-events: none;
+  }
   .wrap { position: relative; z-index: 1; }
 
   /* Header dot: was a static glow, now a slow breathing pulse — small, cheap, always-on. */
@@ -1686,6 +1696,7 @@
 <body>
 <button class="mode-toggle" id="btnModeToggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">🌙</button>
 
+<canvas id="gridGlow" aria-hidden="true"></canvas>
 <canvas id="ambientCanvas" aria-hidden="true"></canvas>
 
 <!-- ============ SIGN-IN SCREEN ============ -->
@@ -11580,6 +11591,167 @@
     if (cardBtn) cardBtn.addEventListener('click', function () { doInstall(false); });
     if (menuBtn) menuBtn.addEventListener('click', function () { doInstall(true); });
   })();
+</script>
+<script>
+/* Cursor-lit background lattice */
+(function () {
+  const cv = document.getElementById('gridGlow');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const CELL = 44;          // grid spacing (px)
+  const R = 250;            // radius of the lit area (px)
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let W = 0, H = 0, dpr = 1;
+  let base = null, bright = null;
+  let rgb = [58, 219, 196], light = false, colorKey = '';
+  const lit = new Map();    // "cx,cy" -> intensity (0..1), fades out as a trail
+  let mx = -9999, my = -9999, sx = -9999, sy = -9999;
+  let presence = 0, targetPresence = 0, raf = null, frameN = 0;
+  const tmp = document.createElement('canvas');
+  const tctx = tmp.getContext('2d');
+
+  function parseColor(c) {
+    c = (c || '').trim();
+    let m = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (m) {
+      let h = m[1];
+      if (h.length === 3) h = h.split('').map(x => x + x).join('');
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    m = c.match(/rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/);
+    return m ? [+m[1], +m[2], +m[3]] : null;
+  }
+
+  function readColor() {
+    const root = document.documentElement;
+    const c = getComputedStyle(root).getPropertyValue('--teal');
+    const parsed = parseColor(c);
+    if (parsed) rgb = parsed;
+    light = root.classList.contains('light');
+    const key = rgb.join(',') + (light ? 'L' : 'D') + W + 'x' + H;
+    if (key !== colorKey) { colorKey = key; buildLayers(); }
+  }
+
+  function makeLayer(lineAlpha, dotAlpha, lw) {
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(W * dpr); c.height = Math.ceil(H * dpr);
+    const g = c.getContext('2d');
+    g.scale(dpr, dpr);
+    const col = a => 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')';
+    g.strokeStyle = col(lineAlpha);
+    g.lineWidth = lw;
+    g.beginPath();
+    for (let x = 0; x <= W; x += CELL) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); }
+    for (let y = 0; y <= H; y += CELL) { g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); }
+    g.stroke();
+    // little plus-marks at every intersection
+    g.strokeStyle = col(dotAlpha);
+    g.lineWidth = 1.4;
+    g.beginPath();
+    for (let x = 0; x <= W; x += CELL) {
+      for (let y = 0; y <= H; y += CELL) {
+        g.moveTo(x - 3, y + 0.5); g.lineTo(x + 4, y + 0.5);
+        g.moveTo(x + 0.5, y - 3); g.lineTo(x + 0.5, y + 4);
+      }
+    }
+    g.stroke();
+    return c;
+  }
+
+  function buildLayers() {
+    base = makeLayer(light ? 0.07 : 0.05, light ? 0.12 : 0.09, 1);
+    bright = makeLayer(light ? 0.55 : 0.6, light ? 0.9 : 0.95, 1);
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.ceil(W * dpr); cv.height = Math.ceil(H * dpr);
+    tmp.width = tmp.height = Math.ceil(R * 2 * dpr);
+    colorKey = '';
+    readColor();
+    draw();
+  }
+
+  function col(a) { return 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')'; }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (base) ctx.drawImage(base, 0, 0, W, H);
+    if (presence < 0.01 && !lit.size) return;
+
+    // lit cells (fading trail)
+    lit.forEach((v, k) => {
+      const [cx, cy] = k.split(',').map(Number);
+      const x = cx * CELL, y = cy * CELL;
+      ctx.fillStyle = col((light ? 0.16 : 0.13) * v);
+      ctx.fillRect(x + 1, y + 1, CELL - 1, CELL - 1);
+      ctx.strokeStyle = col(0.45 * v);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, CELL, CELL);
+    });
+
+    // bright lattice revealed through a soft radial mask around the cursor
+    if (presence > 0.01 && bright) {
+      const size = Math.ceil(R * 2 * dpr);
+      tctx.setTransform(1, 0, 0, 1, 0, 0);
+      tctx.globalCompositeOperation = 'source-over';
+      tctx.clearRect(0, 0, size, size);
+      tctx.drawImage(bright, (sx - R) * dpr, (sy - R) * dpr, size, size, 0, 0, size, size);
+      tctx.globalCompositeOperation = 'destination-in';
+      const g = tctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      g.addColorStop(0, 'rgba(0,0,0,' + presence + ')');
+      g.addColorStop(0.45, 'rgba(0,0,0,' + (0.55 * presence) + ')');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      tctx.fillStyle = g;
+      tctx.fillRect(0, 0, size, size);
+      ctx.drawImage(tmp, sx - R, sy - R, R * 2, R * 2);
+
+      // soft ambient glow under the lattice
+      const g2 = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 1.1);
+      g2.addColorStop(0, col((light ? 0.10 : 0.09) * presence));
+      g2.addColorStop(1, col(0));
+      ctx.fillStyle = g2;
+      ctx.fillRect(sx - R * 1.1, sy - R * 1.1, R * 2.2, R * 2.2);
+    }
+  }
+
+  function tick() {
+    raf = null;
+    if (!(frameN++ % 40)) readColor();
+    // smooth follow + fade in/out
+    sx += (mx - sx) * 0.22; sy += (my - sy) * 0.22;
+    presence += (targetPresence - presence) * 0.12;
+    if (presence < 0.01 && targetPresence === 0) presence = 0;
+    lit.forEach((v, k) => { v *= 0.93; if (v < 0.03) lit.delete(k); else lit.set(k, v); });
+    draw();
+    if (presence > 0 || lit.size) raf = requestAnimationFrame(tick);
+  }
+  function wake() { if (!raf && !document.hidden) raf = requestAnimationFrame(tick); }
+
+  function onMove(e) {
+    mx = e.clientX; my = e.clientY;
+    if (presence < 0.02 && targetPresence === 0) { sx = mx; sy = my; }
+    targetPresence = 1;
+    if (!reduce) {
+      const cx = Math.floor(mx / CELL), cy = Math.floor(my / CELL);
+      lit.set(cx + ',' + cy, 1);
+    }
+    wake();
+  }
+  function onLeave() { targetPresence = 0; wake(); }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('pointermove', onMove, { passive: true });
+  window.addEventListener('pointerdown', onMove, { passive: true });
+  window.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') onLeave(); }, { passive: true });
+  window.addEventListener('pointercancel', onLeave, { passive: true });
+  document.documentElement.addEventListener('mouseleave', onLeave);
+  document.addEventListener('visibilitychange', () => { if (document.hidden && raf) { cancelAnimationFrame(raf); raf = null; } });
+  resize();
+})();
 </script>
 </body>
 </html>
